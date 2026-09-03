@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Web Agent Recorder",
+  "version": "0.1.0",
+  "description": "Local RawEvent recorder with mandatory redaction.",
+  "permissions": ["scripting", "storage", "tabs"],
+  "background": { "service_worker": "background/serviceWorker.js", "type": "module" },
+  "content_scripts": [{ "matches": ["<all_urls>"], "js": ["content/recorder.js"], "run_at": "document_start", "all_frames": true }],
+  "web_accessible_resources": [{ "resources": ["page-hooks.js"], "matches": ["<all_urls>"] }]
+}

@@ -7,7 +7,8 @@
   "types": "./dist/index.d.ts",
   "dependencies": {
     "@web-agent/protocol": "*",
-    "@web-agent/recorder-core": "*"
+    "@web-agent/recorder-core": "*",
+    "@web-agent/safety": "*"
   },
   "scripts": {
     "build": "npm run build -w @web-agent/recorder-core && tsc --project tsconfig.json",
