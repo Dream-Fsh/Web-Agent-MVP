@@ -5,8 +5,12 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "dependencies": {
+    "@web-agent/protocol": "*",
+    "@web-agent/recorder-core": "*"
+  },
   "scripts": {
-    "build": "tsc --project tsconfig.json",
+    "build": "npm run build -w @web-agent/recorder-core && tsc --project tsconfig.json",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests"
   }
