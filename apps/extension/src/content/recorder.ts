@@ -41,8 +41,13 @@ export function startDomRecorder(document: Document, options: DomRecorderOptions
   };
   for (const type of Object.keys(domEventTypes)) document.addEventListener(type, handler, true);
   const navigation = () => emit("navigation", null, undefined, { navigationKind: "browser" });
+  const spaNavigation = (event: Event) => {
+    const detail = event instanceof CustomEvent && typeof event.detail === "object" && event.detail ? event.detail : {};
+    emit("navigation", null, undefined, { navigationKind: "spa", ...detail });
+  };
   window.addEventListener("popstate", navigation);
   window.addEventListener("hashchange", navigation);
+  window.addEventListener("__web_agent_spa_navigation__", spaNavigation);
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") emit("tab-change"); });
-  return () => { for (const type of Object.keys(domEventTypes)) document.removeEventListener(type, handler, true); window.removeEventListener("popstate", navigation); window.removeEventListener("hashchange", navigation); };
+  return () => { for (const type of Object.keys(domEventTypes)) document.removeEventListener(type, handler, true); window.removeEventListener("popstate", navigation); window.removeEventListener("hashchange", navigation); window.removeEventListener("__web_agent_spa_navigation__", spaNavigation); };
 }
