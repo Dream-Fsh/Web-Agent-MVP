@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { recordCapturedEvent } from "./index.js";
+import { createCapturedEvent, recordCapturedEvent } from "./index.js";
 
 describe("Recorder persistence boundary", () => {
   it("redacts and schema-validates an event before the sink receives it", () => {
@@ -10,5 +10,10 @@ describe("Recorder persistence boundary", () => {
   it("does not call storage when the redacted event violates RawEvent schema", () => {
     const sink = () => { throw new Error("storage must not be called"); };
     expect(() => recordCapturedEvent({ schemaVersion:"1.0", id:"", sessionId:"s", timestamp:1, type:"click", url:"https://fixture.test", frame:{frameId:0,framePath:[]} }, sink)).toThrow("RawEvent validation failed");
+  });
+  it("creates protocol-owned tab and SPA events with stable frame context", () => {
+    const context = { sessionId:"s", url:"https://fixture.test/spa", frame:{frameId:12,framePath:["root","billing"]} };
+    expect(createCapturedEvent(context, { id:"tab", timestamp:1, type:"tab-change" })).toMatchObject({ schemaVersion:"1.0", type:"tab-change", frame:context.frame });
+    expect(createCapturedEvent(context, { id:"nav", timestamp:2, type:"navigation", metadata:{navigationKind:"pushState"} })).toMatchObject({ type:"navigation", metadata:{navigationKind:"pushState"} });
   });
 });
