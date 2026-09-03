@@ -11,8 +11,14 @@
     "@web-agent/safety": "*"
   },
   "scripts": {
-    "build": "npm run build -w @web-agent/recorder-core && tsc --project tsconfig.json",
+    "build": "npm run build -w @web-agent/recorder-core && npm run bundle:content && npm run bundle:background",
+    "bundle:content": "vite build --config vite.content.config.ts",
+    "bundle:background": "vite build --config vite.background.config.ts",
     "typecheck": "tsc --project tsconfig.json --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "verify:extension": "node ./scripts/verify-build.mjs"
+  },
+  "devDependencies": {
+    "vite": "^7.3.6"
   }
 }
