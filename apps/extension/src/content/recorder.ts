@@ -8,6 +8,12 @@ export interface DomRecorderOptions {
   nextId?: () => string;
 }
 
+export interface ChromeRuntime { sendMessage: (message: { kind: "raw-event"; event: RawEvent }) => void }
+
+export function createChromeSink(runtime: ChromeRuntime): (event: RawEvent) => void {
+  return (event) => runtime.sendMessage({ kind: "raw-event", event });
+}
+
 const domEventTypes: Readonly<Record<string, RawEventType>> = {
   click: "click", dblclick: "dblclick", input: "input", change: "change", submit: "submit",
 };
