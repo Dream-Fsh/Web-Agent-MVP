@@ -10,10 +10,14 @@ const write = /保存|编辑|创建|修改预算|提交|启用|暂停广告|save
 
 function redactValue(value: unknown, key = ""): unknown {
   if (sensitiveKey.test(key)) return REDACTED;
+  if (typeof value === "string" && /(?:password|authorization|cookie|token|access_token|refresh_token)\s*[=:]/i.test(value)) return REDACTED;
   if (Array.isArray(value)) return value.map((item) => redactValue(item));
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([childKey, childValue]) => [childKey, redactValue(childValue, childKey)]));
   return value;
 }
+
+/** Redacts structured diagnostic data before it can be persisted or exported. */
+export function redactSensitiveData<T>(value: T): T { return redactValue(value) as T; }
 
 export function redactRawEvent(event: RawEvent): RawEvent {
   const element = event.element ? { ...event.element, attributes: redactValue(event.element.attributes) as Record<string, string> } : undefined;
