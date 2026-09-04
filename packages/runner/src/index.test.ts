@@ -33,3 +33,18 @@ it("blocks write and destructive workflow steps before Playwright acts", async (
   ]))).rejects.toBeInstanceOf(UnsafeActionBlockedError);
   await page.close();
 });
+
+it("updates the execution context after switchTab so later input and click use Page B", async () => {
+  const context = await browser.newContext();
+  const pageA = await context.newPage();
+  const pageB = await context.newPage();
+  await pageB.goto(`${fixture.baseUrl}/rta`);
+  await runWorkflow(pageA, workflow(`${fixture.baseUrl}/modal`, [
+    { id:"switch", type:"switchTab", parameters:{ index:1 } },
+    { id:"account", type:"input", parameters:{ value:"10001" }, target:{ fingerprint:{ tag:"input" }, locators:[{ strategy:"label", value:"账户ID", score:1 }] } },
+    { id:"query", type:"click", target:{ fingerprint:{ role:"button" }, locators:[{ strategy:"role", value:"查询", score:1 }] } },
+  ]));
+  expect(await pageB.getByLabel("账户ID").inputValue()).toBe("10001");
+  expect(await pageA.getByLabel("账户ID").count()).toBe(0);
+  await context.close();
+});
