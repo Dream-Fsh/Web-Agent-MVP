@@ -26,7 +26,8 @@ function rtaPage(url: URL, route = "/rta"): string {
     return `<tr><td>RTA${number}</td><td>策略 ${number}</td><td>${index % 2 === 0 ? "生效中" : "已暂停"}</td></tr>`;
   }).join("");
   const result = accountId ? `<p role="status">账户 ${accountId} 的查询结果</p>` : "";
-  return document("RTA 策略", `<label>账户ID <input name="accountId" value="${accountId}"></label><button type="button" role="button">查询</button>${result}<table><thead><tr><th>策略ID</th><th>策略名称</th><th>状态</th></tr></thead><tbody>${rows}</tbody></table><nav aria-label="分页"><a href="${route}?page=1">第 1 页</a><a href="${route}?page=2">第 2 页</a></nav>`);
+  const next = currentPage < 2 ? `<a rel="next" href="${route}?page=${currentPage + 1}">下一页</a>` : "";
+  return document("RTA 策略", `<label>账户ID <input name="accountId" value="${accountId}"></label><button type="button" role="button">查询</button>${result}<table><thead><tr><th>策略ID</th><th>策略名称</th><th>状态</th></tr></thead><tbody>${rows}</tbody></table><nav aria-label="分页"><a href="${route}?page=1">第 1 页</a><a href="${route}?page=2">第 2 页</a>${next}</nav>`);
 }
 
 function render(url: URL): string {
@@ -45,6 +46,7 @@ function render(url: URL): string {
     case "/iframe": return document("Iframe", '<iframe title="账户选择器" src="/iframe-content"></iframe>');
     case "/iframe-content": return document("账户选择器", '<button type="button">选择账户</button>');
     case "/nested-iframe": return document("嵌套 Iframe", '<iframe title="外层 frame" src="/iframe"></iframe>');
+    case "/virtual-table": return document("虚拟表格", '<div data-virtualized="true" role="grid" aria-rowcount="100"><div role="row">当前可见行</div></div>');
     case "/write-actions": return document("写操作", '<button>保存</button><button>修改预算</button><button>暂停广告</button><button>删除广告</button><button>支付</button>');
     default: return document("未找到", '<a href="/dashboard">返回后台</a>');
   }
@@ -53,7 +55,7 @@ function render(url: URL): string {
 export async function startFixtureServer(port = 0): Promise<FixtureServer> {
   const server: Server = createServer((request, response) => {
     const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "127.0.0.1"}`);
-    const isKnownRoute = ["/login", "/dashboard", "/rta", "/dynamic", "/duplicate-buttons", "/pagination", "/modal", "/spa", "/iframe", "/iframe-content", "/nested-iframe", "/write-actions"].includes(url.pathname);
+    const isKnownRoute = ["/login", "/dashboard", "/rta", "/dynamic", "/duplicate-buttons", "/pagination", "/modal", "/spa", "/iframe", "/iframe-content", "/nested-iframe", "/virtual-table", "/write-actions"].includes(url.pathname);
     response.writeHead(isKnownRoute ? 200 : 404, { "content-type": "text/html; charset=utf-8" });
     response.end(render(url));
   });
