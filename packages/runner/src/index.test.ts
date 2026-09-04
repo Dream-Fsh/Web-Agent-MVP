@@ -63,3 +63,12 @@ it("executes assert and extract DSL steps, writing outputs and failing required 
   expect(failed.status).toBe("failed");
   await page.close();
 });
+
+it("resolves variables once before input executor execution", async () => {
+  const page = await browser.newPage();
+  await runWorkflow(page, workflow(`${fixture.baseUrl}/rta`, [
+    { id:"account", type:"input", parameters:{ value:"{{accountId}}" }, target:{ fingerprint:{ tag:"input" }, locators:[{ strategy:"label", value:"账户ID", score:1 }] } },
+  ]), { variables:{ accountId:"10001" } });
+  expect(await page.getByLabel("账户ID").inputValue()).toBe("10001");
+  await page.close();
+});

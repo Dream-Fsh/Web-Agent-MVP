@@ -11,6 +11,7 @@ import { executeSelect } from "./select.js";
 import { executeSwitchTab } from "./switchTab.js";
 import { executeWaitFor } from "./waitFor.js";
 import type { RunContext } from "./context.js";
+import { resolveWorkflowValue } from "./variables.js";
 
 export interface RunOptions { policy?: SafetyPolicy; variables?: RunContext["variables"]; runId?: string }
 export interface RunStepResult { id: string; type: WorkflowStep["type"]; status: "completed" | "failed" | "blocked"; message?: string }
@@ -37,18 +38,19 @@ export async function runWorkflow(page: Page, input: Workflow, options: RunOptio
   await context.currentPage.goto(workflow.startUrl, { waitUntil:"domcontentloaded" });
   for (const step of workflow.steps) {
     try {
-      assertStepAllowed(step, context.policy);
-      switch (step.type) {
-      case "navigate": await executeNavigate(context, step); break;
-      case "click": await executeClick(context, step); break;
-      case "input": await executeInput(context, step); break;
-      case "select": await executeSelect(context, step); break;
-      case "waitFor": await executeWaitFor(context, step); break;
-      case "switchTab": await executeSwitchTab(context, step); break;
-        case "download": context.downloads.push(await executeDownload(context, step)); break;
-        case "extract": await executeExtract(context, step); break;
+      const resolvedStep = { ...step, parameters:step.parameters ? resolveWorkflowValue(step.parameters, context.variables) : undefined };
+      assertStepAllowed(resolvedStep, context.policy);
+      switch (resolvedStep.type) {
+      case "navigate": await executeNavigate(context, resolvedStep); break;
+      case "click": await executeClick(context, resolvedStep); break;
+      case "input": await executeInput(context, resolvedStep); break;
+      case "select": await executeSelect(context, resolvedStep); break;
+      case "waitFor": await executeWaitFor(context, resolvedStep); break;
+      case "switchTab": await executeSwitchTab(context, resolvedStep); break;
+        case "download": context.downloads.push(await executeDownload(context, resolvedStep)); break;
+        case "extract": await executeExtract(context, resolvedStep); break;
         case "assert": {
-          const assertions = step.parameters?.assertions;
+          const assertions = resolvedStep.parameters?.assertions;
           if (!Array.isArray(assertions)) throw new Error("Assert steps require assertions");
           const result = await evaluateAssertions(context.currentPage, assertions as Assertion[]);
           context.outputs[step.id] = result;
