@@ -39,7 +39,7 @@ export async function runWorkflow(page: Page, input: Workflow, options: RunOptio
   for (const step of workflow.steps) {
     try {
       const resolvedStep = { ...step, parameters:step.parameters ? resolveWorkflowValue(step.parameters, context.variables) : undefined };
-      assertStepAllowed(resolvedStep, context.policy);
+      assertStepAllowed(resolvedStep, context.policy, workflow.startUrl);
       switch (resolvedStep.type) {
       case "navigate": await executeNavigate(context, resolvedStep); break;
       case "click": await executeClick(context, resolvedStep); break;

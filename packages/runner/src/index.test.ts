@@ -72,3 +72,13 @@ it("resolves variables once before input executor execution", async () => {
   expect(await page.getByLabel("账户ID").inputValue()).toBe("10001");
   await page.close();
 });
+
+it("blocks cross-origin navigation before the executor changes the page", async () => {
+  const page = await browser.newPage();
+  const result = await runWorkflow(page, workflow(`${fixture.baseUrl}/rta`, [
+    { id:"outside", type:"navigate", url:"https://example.com/" },
+  ]));
+  expect(result.status).toBe("blocked");
+  expect(page.url()).toBe(`${fixture.baseUrl}/rta`);
+  await page.close();
+});

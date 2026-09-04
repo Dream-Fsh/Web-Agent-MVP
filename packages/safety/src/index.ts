@@ -1,7 +1,8 @@
 import type { RawEvent, Workflow, WorkflowStep } from "@web-agent/protocol";
 
-export type RiskLevel = "safe" | "write" | "destructive";
-export interface SafetyPolicy { mode?: "read-only" | "allow-writes" }
+export type RiskLevel = "safe" | "write" | "destructive" | "unknown";
+export interface RiskAssessment { risk: RiskLevel; reason: string }
+export interface SafetyPolicy { mode?: "read-only" | "allow-writes"; allowedOrigins?: string[] }
 export const REDACTED = "[REDACTED]";
 
 const sensitiveKey = /password|authorization|cookie|token|access_token|refresh_token|prompt|filename/i;
@@ -69,18 +70,45 @@ function stepText(step: WorkflowStep): string {
   return [step.target?.fingerprint.text, step.target?.fingerprint.role, ...((step.target?.locators ?? []).map((locator) => locator.value))].filter(Boolean).join(" ");
 }
 
-export function classifyStep(step: WorkflowStep): RiskLevel {
+const readOnlyStepTypes: ReadonlySet<WorkflowStep["type"]> = new Set(["navigate", "waitFor", "switchTab", "extract", "assert", "download"]);
+const readOnlyInteraction = /查询|搜索|筛选|查看|关闭|账户|下一页|上一页|search|filter|view|close|account|next|previous/i;
+
+/** Assesses risk explicitly; legacy keyword rules remain only as a fallback signal. */
+export function assessStepRisk(step: WorkflowStep): RiskAssessment {
   const text = stepText(step);
-  if (destructive.test(text)) return "destructive";
-  if (write.test(text)) return "write";
-  return "safe";
+  if (destructive.test(text)) return { risk:"destructive", reason:"destructive keyword fallback" };
+  if (write.test(text)) return { risk:"write", reason:"write keyword fallback" };
+  if (readOnlyStepTypes.has(step.type)) return { risk:"safe", reason:`${step.type} is a read-only workflow operation` };
+  if (readOnlyInteraction.test(text)) return { risk:"safe", reason:"recognized read-only interaction" };
+  return { risk:"unknown", reason:"no explicit safe action classification" };
+}
+
+export function classifyStep(step: WorkflowStep): RiskLevel {
+  return assessStepRisk(step).risk;
 }
 
 export class UnsafeActionBlockedError extends Error {
-  public constructor(public readonly risk: RiskLevel) { super(`Unsafe ${risk} action blocked`); this.name = "UnsafeActionBlockedError"; }
+  public constructor(public readonly risk: RiskLevel, reason?: string) { super(`Unsafe ${risk} action blocked${reason ? `: ${reason}` : ""}`); this.name = "UnsafeActionBlockedError"; }
 }
 
-export function assertStepAllowed(step: WorkflowStep, policy: SafetyPolicy = { mode: "read-only" }): void {
-  const risk = classifyStep(step);
-  if (risk === "destructive" || (risk === "write" && (policy.mode ?? "read-only") === "read-only")) throw new UnsafeActionBlockedError(risk);
+function isAllowedOrigin(destination: URL, allowedOrigins: string[]): boolean {
+  return allowedOrigins.some((origin) => {
+    try { return new URL(origin).origin === destination.origin; }
+    catch { return false; }
+  });
+}
+
+export function assertStepAllowed(step: WorkflowStep, policy: SafetyPolicy = { mode: "read-only" }, startUrl?: string): void {
+  const assessment = assessStepRisk(step);
+  if (assessment.risk === "destructive") throw new UnsafeActionBlockedError(assessment.risk, assessment.reason);
+  if ((policy.mode ?? "read-only") === "read-only" && assessment.risk !== "safe") throw new UnsafeActionBlockedError(assessment.risk, assessment.reason);
+  if (step.type === "navigate" && step.url && startUrl) {
+    let destination: URL;
+    let start: URL;
+    try { destination = new URL(step.url); start = new URL(startUrl); }
+    catch { throw new UnsafeActionBlockedError("unknown", "navigation URL is invalid"); }
+    if (destination.origin !== start.origin && !isAllowedOrigin(destination, policy.allowedOrigins ?? [])) {
+      throw new UnsafeActionBlockedError("unknown", "cross-origin navigation is not allowlisted");
+    }
+  }
 }

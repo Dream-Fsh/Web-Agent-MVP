@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { UnsafeActionBlockedError, assertStepAllowed, classifyStep, redactRawEvent, redactSensitiveData, redactUrl, redactWorkflow } from "./index.js";
+import { UnsafeActionBlockedError, assertStepAllowed, assessStepRisk, classifyStep, redactRawEvent, redactSensitiveData, redactUrl, redactWorkflow } from "./index.js";
 
 describe("recording redaction", () => {
   it("redacts secrets before a RawEvent can be persisted", () => {
@@ -31,5 +31,15 @@ describe("runtime safety", () => {
     expect(classifyStep(search)).toBe("safe");
     expect(() => assertStepAllowed(search, { mode:"read-only" })).not.toThrow();
     expect(() => assertStepAllowed(save, { mode:"read-only" })).toThrow(UnsafeActionBlockedError);
+  });
+  it("blocks unknown actions in read-only mode while exposing their assessment", () => {
+    const unknown = { id:"opaque", type:"click" as const, target:{fingerprint:{text:"执行"},locators:[{strategy:"text" as const,value:"执行",score:1}]}};
+    expect(assessStepRisk(unknown)).toMatchObject({ risk:"unknown" });
+    expect(() => assertStepAllowed(unknown, { mode:"read-only" })).toThrow(UnsafeActionBlockedError);
+  });
+  it("blocks cross-origin navigation unless the destination is allowed", () => {
+    const navigate = { id:"outside", type:"navigate" as const, url:"https://outside.test/report" };
+    expect(() => assertStepAllowed(navigate, { mode:"read-only" }, "https://fixture.test/rta")).toThrow(UnsafeActionBlockedError);
+    expect(() => assertStepAllowed(navigate, { mode:"read-only", allowedOrigins:["https://outside.test"] }, "https://fixture.test/rta")).not.toThrow();
   });
 });
