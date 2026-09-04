@@ -22,6 +22,25 @@ it("extracts every HTML-table pagination page through URL conditions", async () 
   await page.close();
 });
 
+it("continues AJAX pagination when the URL remains unchanged", async () => {
+  const page = await browser.newPage();
+  await page.goto(`${fixture.baseUrl}/ajax-pagination`);
+  const table = { fingerprint:{ tag:"table" }, locators:[{ strategy:"css" as const, value:"table", score:1 }] };
+  const next = { fingerprint:{}, locators:[{ strategy:"css" as const, value:'button[rel="next"]', score:1 }] };
+  await expect(extractPaginatedTable(page, table, next)).resolves.toMatchObject({ rows:expect.arrayContaining([expect.arrayContaining(["RTA001"]), expect.arrayContaining(["RTA011"])]) });
+  expect(page.url()).toBe(`${fixture.baseUrl}/ajax-pagination`);
+  await page.close();
+});
+
+it("propagates pagination ambiguity instead of treating it as the last page", async () => {
+  const page = await browser.newPage();
+  await page.goto(`${fixture.baseUrl}/pagination-ambiguous`);
+  const table = { fingerprint:{ tag:"table" }, locators:[{ strategy:"css" as const, value:"table", score:1 }] };
+  const next = { fingerprint:{}, locators:[{ strategy:"css" as const, value:'a[rel="next"]', score:1 }] };
+  await expect(extractPaginatedTable(page, table, next)).rejects.toMatchObject({ code:"AMBIGUOUS_TARGET" });
+  await page.close();
+});
+
 it("uses collection resolution for list and count extraction", async () => {
   const page = await browser.newPage();
   await page.goto(`${fixture.baseUrl}/duplicate-buttons`);

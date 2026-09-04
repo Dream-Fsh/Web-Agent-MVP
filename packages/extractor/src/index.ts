@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import type { Target } from "@web-agent/protocol";
-import { resolveCollectionTarget, resolveSingleTarget } from "@web-agent/locator-engine";
+import { TargetResolutionError, resolveCollectionTarget, resolveSingleTarget } from "@web-agent/locator-engine";
 
 export class UnsupportedVirtualTableError extends Error { public constructor() { super("UNSUPPORTED_VIRTUAL_TABLE"); this.name = "UnsupportedVirtualTableError"; } }
 
@@ -24,7 +24,20 @@ export async function extractTable(page: Page, target: Target): Promise<Extracte
   };
 }
 
-/** Extracts complete HTML-table pagination using navigation conditions, never sleeps. */
+function tableFingerprint(table: ExtractedTable): string {
+  return JSON.stringify(table);
+}
+
+async function waitForTableFingerprintChange(page: Page, target: Target, previous: string, timeoutMs = 4_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (tableFingerprint(await extractTable(page, target)) !== previous) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error("TABLE_CHANGE_TIMEOUT");
+}
+
+/** Extracts complete HTML-table pagination using a table-state condition, not URL changes. */
 export async function extractPaginatedTable(page: Page, tableTarget: Target, nextTarget: Target, maxPages = 100): Promise<ExtractedTable> {
   const aggregate: ExtractedTable = { headers:[], rows:[] };
   for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
@@ -33,13 +46,14 @@ export async function extractPaginatedTable(page: Page, tableTarget: Target, nex
     else if (aggregate.headers.join("\u0000") !== current.headers.join("\u0000")) throw new Error("Table headers changed during pagination");
     aggregate.rows.push(...current.rows);
     let next;
-    try { next = await resolveSingleTarget(page, nextTarget); } catch { break; }
-    const previousUrl = page.url();
-    await Promise.all([
-      page.waitForURL((url) => url.href !== previousUrl),
-      next.locator.click(),
-    ]);
-    await page.waitForLoadState("domcontentloaded");
+    try {
+      next = await resolveSingleTarget(page, nextTarget);
+    } catch (error) {
+      if (error instanceof TargetResolutionError && error.code === "NO_TARGET_MATCH") break;
+      throw error;
+    }
+    await next.locator.click();
+    await waitForTableFingerprintChange(page, tableTarget, tableFingerprint(current));
   }
   return aggregate;
 }
