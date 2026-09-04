@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { chromium, type Browser } from "@playwright/test";
 import { startFixtureServer, type FixtureServer } from "@web-agent/fixture-site";
-import { resolveTarget } from "./index.js";
+import { resolveCollectionTarget, resolveSingleTarget, resolveTarget } from "./index.js";
 
 let fixture: FixtureServer;
 let browser: Browser;
@@ -33,6 +33,31 @@ it("reports AMBIGUOUS_TARGET instead of selecting the first repeated element", a
   const page = await browser.newPage();
   await page.goto(`${fixture.baseUrl}/duplicate-buttons`);
   await expect(resolveTarget(page, { fingerprint:{ tag:"button" }, locators:[{ strategy:"text", value:"查询", score:0.8 }] })).rejects.toMatchObject({ code:"AMBIGUOUS_TARGET" });
+  await page.close();
+});
+
+it("rejects equally credible candidates that identify different DOM elements", async () => {
+  const page = await browser.newPage();
+  await page.goto(`${fixture.baseUrl}/duplicate-buttons`);
+  await expect(resolveSingleTarget(page, {
+    fingerprint:{ tag:"button" },
+    locators:[
+      { strategy:"css", value:"button:nth-of-type(4)", score:1 },
+      { strategy:"css", value:"button:nth-of-type(5)", score:1 },
+    ],
+  })).rejects.toMatchObject({ code:"LOCATOR_CONFLICT" });
+  await page.close();
+});
+
+it("resolves a collection without forcing it into a single target", async () => {
+  const page = await browser.newPage();
+  await page.goto(`${fixture.baseUrl}/duplicate-buttons`);
+  const resolved = await resolveCollectionTarget(page, {
+    fingerprint:{ tag:"button" },
+    locators:[{ strategy:"text", value:"查询", score:0.8 }],
+  });
+  expect(resolved.locators).toHaveLength(2);
+  expect(await Promise.all(resolved.locators.map((locator) => locator.textContent()))).toEqual(["查询", "查询"]);
   await page.close();
 });
 
