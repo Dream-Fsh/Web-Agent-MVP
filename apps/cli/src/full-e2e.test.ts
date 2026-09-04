@@ -4,7 +4,6 @@ import type { ElementSnapshot, RawEvent, Workflow } from "@web-agent/protocol";
 import { createCapturedEvent, recordCapturedEvent } from "@web-agent/recorder-core";
 import { normalizeEvents } from "@web-agent/normalizer";
 import { runWorkflow } from "@web-agent/runner";
-import { UnsafeActionBlockedError } from "@web-agent/safety";
 import { startFixtureServer, type FixtureServer } from "@web-agent/fixture-site";
 
 let fixture: FixtureServer;
@@ -30,7 +29,9 @@ it("records redacted RawEvent, normalizes it, and replays after dynamic CSS chan
 
 it("fails safely on ambiguous and destructive targets", async () => {
   const page = await browser.newPage();
-  await expect(runWorkflow(page, { ...workflow(`${fixture.baseUrl}/duplicate-buttons`, { ...queryElement(), locatorCandidates:[{ strategy:"text", value:"查询", score:1 }] }), id:"ambiguous" })).rejects.toMatchObject({ code:"AMBIGUOUS_TARGET" });
-  await expect(runWorkflow(page, { ...workflow(`${fixture.baseUrl}/write-actions`, { ...queryElement(), locatorCandidates:[{ strategy:"text", value:"删除广告", score:1 }] }), id:"delete" })).rejects.toBeInstanceOf(UnsafeActionBlockedError);
+  const ambiguous = await runWorkflow(page, { ...workflow(`${fixture.baseUrl}/duplicate-buttons`, { ...queryElement(), locatorCandidates:[{ strategy:"text", value:"查询", score:1 }] }), id:"ambiguous" });
+  expect(ambiguous).toMatchObject({ status:"failed", steps:[{ status:"failed" }] });
+  const destructive = await runWorkflow(page, { ...workflow(`${fixture.baseUrl}/write-actions`, { ...queryElement(), locatorCandidates:[{ strategy:"text", value:"删除广告", score:1 }] }), id:"delete" });
+  expect(destructive).toMatchObject({ status:"blocked", steps:[{ status:"blocked" }] });
   await page.close();
 });
