@@ -1,0 +1,24 @@
+{
+  "name": "@web-agent/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "dependencies": {
+    "@web-agent/protocol": "*",
+    "@web-agent/recorder-core": "*",
+    "@web-agent/safety": "*"
+  },
+  "scripts": {
+    "build": "npm run build -w @web-agent/recorder-core && npm run bundle:content && npm run bundle:background",
+    "bundle:content": "vite build --config vite.content.config.ts",
+    "bundle:background": "vite build --config vite.background.config.ts",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "verify:extension": "node ./scripts/verify-build.mjs"
+  },
+  "devDependencies": {
+    "vite": "^7.3.6"
+  }
+}

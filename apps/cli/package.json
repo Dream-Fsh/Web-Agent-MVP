@@ -1,0 +1,15 @@
+{
+  "name": "@web-agent/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "dependencies": { "@playwright/test":"*", "@web-agent/codex-adapter": "*", "@web-agent/normalizer":"*", "@web-agent/protocol":"*", "@web-agent/recorder-core":"*", "@web-agent/runner":"*", "@web-agent/safety":"*" },
+  "devDependencies": { "@web-agent/fixture-site":"*" },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "test": "npm run build -w @web-agent/codex-adapter && npm run build -w @web-agent/normalizer && npm run build -w @web-agent/recorder-core && npm run build -w @web-agent/runner && npm run build -w @web-agent/fixture-site && vitest run --passWithNoTests"
+  }
+}

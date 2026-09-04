@@ -1,0 +1,12 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+blob-report/
+data/browser-profile/
+data/recordings/
+data/runs/
+data/failures/
+.env
+.env.*
+!.env.example

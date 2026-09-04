@@ -1,0 +1,29 @@
+{
+  "name": "web-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test:e2e": "playwright test",
+    "verify": "npm run typecheck && npm test && npm run test:e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  },
+  "dependencies": {
+    "zod": "^4.1.0"
+  }
+}
