@@ -131,7 +131,7 @@ const rawEventSchema = z.object({
 }).strict();
 
 const interactiveStepTypes: ReadonlySet<StepType> = new Set([
-  "click", "input", "select", "extract", "assert", "download",
+  "click", "input", "select", "extract", "download",
 ]);
 
 const workflowStepSchema = z.object({

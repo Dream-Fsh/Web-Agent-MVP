@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { chromium, type Browser } from "@playwright/test";
 import type { Workflow } from "@web-agent/protocol";
-import { UnsafeActionBlockedError } from "@web-agent/safety";
 import { startFixtureServer, type FixtureServer } from "@web-agent/fixture-site";
 import { runWorkflow } from "./index.js";
 
@@ -28,9 +27,10 @@ it("runs workflow executors through safety and locator resolution without fixed 
 
 it("blocks write and destructive workflow steps before Playwright acts", async () => {
   const page = await browser.newPage();
-  await expect(runWorkflow(page, workflow(`${fixture.baseUrl}/write-actions`, [
+  const result = await runWorkflow(page, workflow(`${fixture.baseUrl}/write-actions`, [
     { id:"delete", type:"click", target:{ fingerprint:{ text:"删除广告" }, locators:[{ strategy:"text", value:"删除广告", score:1 }] } },
-  ]))).rejects.toBeInstanceOf(UnsafeActionBlockedError);
+  ]));
+  expect(result.status).toBe("blocked");
   await page.close();
 });
 
@@ -47,4 +47,19 @@ it("updates the execution context after switchTab so later input and click use P
   expect(await pageB.getByLabel("账户ID").inputValue()).toBe("10001");
   expect(await pageA.getByLabel("账户ID").count()).toBe(0);
   await context.close();
+});
+
+it("executes assert and extract DSL steps, writing outputs and failing required assertions", async () => {
+  const page = await browser.newPage();
+  const success = await runWorkflow(page, workflow(`${fixture.baseUrl}/rta`, [
+    { id:"assert-url", type:"assert", parameters:{ assertions:[{ id:"url", type:"assertUrl", expected:"/rta", required:true }] } },
+    { id:"count", type:"extract", parameters:{ operation:"extractCount", key:"tableCount" }, target:{ fingerprint:{ tag:"table" }, locators:[{ strategy:"css", value:"table", score:1 }] } },
+  ]));
+  expect(success.status).toBe("success");
+  expect(success.outputs).toMatchObject({ tableCount:1 });
+  const failed = await runWorkflow(page, workflow(`${fixture.baseUrl}/rta`, [
+    { id:"assert-url", type:"assert", parameters:{ assertions:[{ id:"url", type:"assertUrl", expected:"/other", required:true }] } },
+  ]));
+  expect(failed.status).toBe("failed");
+  await page.close();
 });
