@@ -36,9 +36,9 @@ function render(url: URL): string {
     case "/rta": return rtaPage(url);
     case "/dynamic": {
       const className = dynamicClasses[dynamicIndex++ % dynamicClasses.length];
-      return document("动态 CSS", `<button class="${className}" type="button" role="button" aria-label="查询">查询</button>`);
+      return document("动态 CSS", `<button class="${className}" data-testid="query" type="button" role="button" aria-label="查询">查询</button>`);
     }
-    case "/duplicate-buttons": return document("重复查询按钮", '<button>查询账户</button><button>查询广告</button><button>查询计划</button>');
+    case "/duplicate-buttons": return document("重复查询按钮", '<button>查询账户</button><button>查询广告</button><button>查询计划</button><button>查询</button><button>查询</button>');
     case "/pagination": return rtaPage(url, "/pagination");
     case "/modal": return document("模态窗", '<button id="open-filter">打开筛选弹窗</button><dialog id="filter"><p>筛选条件</p><button id="close-filter">关闭</button></dialog><script>const openFilter=document.querySelector("#open-filter");const closeFilter=document.querySelector("#close-filter");const filter=document.querySelector("#filter");openFilter.addEventListener("click",()=>filter.showModal());closeFilter.addEventListener("click",()=>filter.close())</script>');
     case "/spa": return document("SPA", '<button id="go">打开详情</button><p id="view">列表</p><script>go.onclick=()=>{history.pushState({},"","/spa/detail");view.textContent="详情"}</script>');
