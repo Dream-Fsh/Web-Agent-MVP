@@ -1,12 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { UnsafeActionBlockedError, assertStepAllowed, classifyStep, redactRawEvent } from "./index.js";
+import { UnsafeActionBlockedError, assertStepAllowed, classifyStep, redactRawEvent, redactSensitiveData, redactUrl, redactWorkflow } from "./index.js";
 
 describe("recording redaction", () => {
   it("redacts secrets before a RawEvent can be persisted", () => {
-    const event = redactRawEvent({ schemaVersion:"1.0", id:"e", sessionId:"s", timestamp:1, type:"input", url:"https://x.test/rta?access_token=secret", frame:{frameId:0,framePath:[]}, value:"secret", element:{tag:"input",attributes:{type:"password",authorization:"Bearer secret"},nearbyText:[],locatorCandidates:[]} });
+    const event = redactRawEvent({ schemaVersion:"1.0", id:"e", sessionId:"s", timestamp:1, type:"input", url:"https://x.test/rta?access_token=secret", frame:{frameId:0,framePath:[],frameUrl:"https://x.test/frame?token=secret"}, value:"secret", element:{tag:"input",attributes:{type:"password",authorization:"Bearer secret"},nearbyText:[],locatorCandidates:[]} });
     expect(event.url).toBe("https://x.test/rta");
+    expect(event.frame.frameUrl).toBe("https://x.test/frame");
     expect(event.value).toBe("[REDACTED]");
     expect(event.element?.attributes.authorization).toBe("[REDACTED]");
+  });
+
+  it("uses one URL redactor for workflows and diagnostic fields", () => {
+    expect(redactUrl("https://x.test/rta?token=secret#section")).toBe("https://x.test/rta#section");
+    const workflow = redactWorkflow({ schemaVersion:"1.0", id:"rta", version:1, name:"RTA", startUrl:"https://x.test/rta?account=10001", variables:{}, metadata:{createdAt:"2026-01-01T00:00:00.000Z",updatedAt:"2026-01-01T00:00:00.000Z"}, steps:[{id:"go",type:"navigate",url:"https://x.test/report?token=secret"}] });
+    expect(workflow.startUrl).toBe("https://x.test/rta");
+    expect(workflow.steps[0]?.url).toBe("https://x.test/report");
+    expect(redactSensitiveData({ diagnosticUrl:"https://x.test/failure?secret=1" })).toEqual({ diagnosticUrl:"https://x.test/failure" });
   });
 });
 

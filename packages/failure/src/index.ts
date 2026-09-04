@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { redactSensitiveData } from "@web-agent/safety";
+import { redactSensitiveData, sanitizeScreenshot, type ScreenshotSanitizer } from "@web-agent/safety";
 
 export interface FailurePackageInput {
   runId: string;
@@ -11,6 +11,7 @@ export interface FailurePackageInput {
   workflow: unknown;
   fullHtml?: string;
   screenshot?: Uint8Array;
+  sanitizeScreenshot?: ScreenshotSanitizer;
   trace?: Uint8Array;
 }
 
@@ -23,13 +24,15 @@ function safeSegment(value: string, name: string): string {
 export async function saveFailurePackage(input: FailurePackageInput, failuresRoot: string): Promise<string> {
   const location = join(failuresRoot, safeSegment(input.runId, "runId"), safeSegment(input.stepId, "stepId"));
   await mkdir(location, { recursive:true });
+  const screenshot = input.screenshot ? await sanitizeScreenshot(input.screenshot, input.sanitizeScreenshot) : undefined;
+  const screenshotStatus = input.screenshot ? (screenshot ? "sanitized" : "omitted-unsanitized") : "not-provided";
   await Promise.all([
-    writeFile(join(location, "failure.json"), `${JSON.stringify(redactSensitiveData(input.error))}\n`, "utf8"),
+    writeFile(join(location, "failure.json"), `${JSON.stringify({ error:redactSensitiveData(input.error), screenshotStatus })}\n`, "utf8"),
     writeFile(join(location, "dom-context.json"), `${JSON.stringify(redactSensitiveData({ nearbyText:input.domContext.nearbyText, structure:input.domContext.structure }))}\n`, "utf8"),
     writeFile(join(location, "target.json"), `${JSON.stringify(redactSensitiveData(input.target))}\n`, "utf8"),
     writeFile(join(location, "workflow.snapshot.json"), `${JSON.stringify(redactSensitiveData(input.workflow))}\n`, "utf8"),
-    writeFile(join(location, "screenshot.png"), input.screenshot ?? new Uint8Array()),
     writeFile(join(location, "trace.zip"), input.trace ?? new Uint8Array()),
+    ...(screenshot ? [writeFile(join(location, "screenshot.png"), screenshot)] : []),
   ]);
   return location;
 }

@@ -27,3 +27,13 @@ it("stores immutable workflow versions and rolls current back to a requested ver
     expect(JSON.parse(await readFile(join(root, "rta-check", "current.json"), "utf8"))).toMatchObject({ version:1 });
   } finally { await rm(root, { recursive:true, force:true }); }
 });
+
+it("redacts workflow URL queries before persistence", async () => {
+  const root = await mkdtemp(join(tmpdir(), "web-agent-workflows-"));
+  try {
+    await saveWorkflowVersion(root, "rta-check", { ...workflow(), startUrl:"https://fixture.test/rta?accountId=10001", steps:[{ id:"go", type:"navigate", url:"https://fixture.test/rta?token=secret" }] });
+    const current = JSON.parse(await readFile(join(root, "rta-check", "current.json"), "utf8"));
+    expect(current.startUrl).toBe("https://fixture.test/rta");
+    expect(current.steps[0].url).toBe("https://fixture.test/rta");
+  } finally { await rm(root, { recursive:true, force:true }); }
+});

@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseWorkflow, type LocatorCandidate, type Workflow } from "@web-agent/protocol";
-import { assertStepAllowed } from "@web-agent/safety";
+import { assertStepAllowed, redactWorkflow } from "@web-agent/safety";
 
 type RepairOperation =
   | { type:"replaceLocator"; stepId:string; index:number; locator:LocatorCandidate }
@@ -53,7 +53,7 @@ export function applyRepairPatch(workflow: Workflow, patch: WorkflowRepairPatch)
 
 function safeName(name: string): string { if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(name)) throw new Error("Workflow name must be a safe path segment"); return name; }
 export async function saveWorkflowVersion(root: string, name: string, workflow: Workflow): Promise<string> {
-  const validated = parseWorkflow(workflow);
+  const validated = parseWorkflow(redactWorkflow(workflow));
   const folder = join(root, safeName(name));
   await mkdir(folder, { recursive:true });
   const versionPath = join(folder, `v${validated.version}.json`);
