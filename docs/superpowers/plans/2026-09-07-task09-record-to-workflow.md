@@ -31,14 +31,14 @@
 - Files: workflow-builder persistence module and disk tests.
 - [x] RED: v1/v2, duplicate/invalid rejection, current pointer, interrupted write.
 - [x] Validate and stage version file before atomic current pointer promotion, reject competing writers.
-- [ ] Verify complete suite, review and commit.
+- [x] Verify complete suite, review and commit.
 
 ## 09E: Complete visible UI E2E
 - Files: recording service composition, Extension stop integration, tests/record-to-workflow.e2e.spec.ts; narrowly required runner/fixture behavior.
-- [ ] RED: UI start → input 10001 → query → UI variable/extract/assert marks → UI stop → generated file → Runner success.
-- [ ] Wire automatic normalization/build/persistence and actual table extraction.
-- [ ] Read generated artifacts for assertions; save representative evidence.
-- [ ] Verify complete suite, review and commit.
+- [x] RED: UI start → input 10001 → query → UI variable/extract/assert marks → UI stop → generated file → Runner success.
+- [x] Wire automatic normalization/build/persistence and actual table extraction.
+- [x] Read generated artifacts for assertions; save representative evidence.
+- [x] Verify complete suite, review and commit.
 
 ## README
 - [ ] Document architecture, supported behavior, loading/recording/replay, safety, V1 limits and commands from tested implementation; review and commit.

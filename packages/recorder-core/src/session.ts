@@ -9,10 +9,12 @@ export interface RecorderState {
 export function emptyRecorderState(): RecorderState {
   return { sessionId: '', recording: false, events: [], annotations: [] };
 }
-export function updateRecorder(state: RecorderState, command: { kind: string; event?: RawEvent; annotation?: RecorderMark }): RecorderState {
+export function updateRecorder(state: RecorderState, command: { kind: string; event?: RawEvent; annotation?: RecorderMark; url?: string }): RecorderState {
   if (command.kind === 'start') {
     if (state.recording) throw new Error('Already recording');
-    return { ...emptyRecorderState(), sessionId: crypto.randomUUID(), recording: true };
+    const next = { ...emptyRecorderState(), sessionId: crypto.randomUUID(), recording: true };
+    if (command.url) next.events.push(recordCapturedEvent({ schemaVersion: '1.0', id: crypto.randomUUID(), sessionId: next.sessionId, timestamp: Date.now(), type: 'navigation', url: command.url, frame: { frameId: 0, framePath: [] } }, () => {}));
+    return next;
   }
   if (command.kind === 'stop') return { ...state, recording: false };
   if (command.kind === 'raw-event') {

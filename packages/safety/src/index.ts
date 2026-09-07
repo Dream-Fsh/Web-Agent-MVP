@@ -34,7 +34,7 @@ export function redactUrl(value: string): string {
 }
 
 export function redactRawEvent(event: RawEvent): RawEvent {
-  const element = event.element ? { ...event.element, attributes: redactValue(event.element.attributes) as Record<string, string> } : undefined;
+  const element = event.element ? redactValue(event.element) as RawEvent['element'] : undefined;
   const inputType = element?.attributes.type?.toLowerCase();
   const sensitiveInput = inputType === "password" || inputType === "hidden" || Boolean(element && sensitiveKey.test(`${element.attributes.name ?? ""} ${element.attributes.id ?? ""}`));
   return {
@@ -42,7 +42,7 @@ export function redactRawEvent(event: RawEvent): RawEvent {
     url: redactUrl(event.url),
     frame:{ ...event.frame, frameUrl:event.frame.frameUrl ? redactUrl(event.frame.frameUrl) : undefined },
     element,
-    value: sensitiveInput || event.type === "upload" ? REDACTED : event.value,
+    value: sensitiveInput || event.type === "upload" ? REDACTED : redactValue(event.value) as string | undefined,
     metadata: redactValue(event.metadata) as Record<string, unknown> | undefined,
   };
 }

@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { parseWorkflow, type Workflow, type WorkflowStep } from "@web-agent/protocol";
 import { assertStepAllowed, type SafetyPolicy } from "@web-agent/safety";
 import { evaluateAssertions, type Assertion } from "@web-agent/assertions";
-import { extractAttribute, extractCount, extractList, extractText } from "@web-agent/extractor";
+import { extractAttribute, extractCount, extractList, extractText, extractTable } from "@web-agent/extractor";
 import { executeClick } from "./click.js";
 import { executeDownload } from "./download.js";
 import { executeInput } from "./input.js";
@@ -23,6 +23,7 @@ async function executeExtract(context: RunContext, step: WorkflowStep): Promise<
   const key = step.parameters?.key;
   if (typeof operation !== "string" || typeof key !== "string") throw new Error("Extract steps require operation and key");
   if (operation === "extractText") context.outputs[key] = await extractText(context.currentPage, step.target);
+  else if (operation === 'extractTable') context.outputs[key] = await extractTable(context.currentPage, step.target);
   else if (operation === "extractAttribute") { const attribute = step.parameters?.attribute; if (typeof attribute !== "string") throw new Error("extractAttribute requires attribute"); context.outputs[key] = await extractAttribute(context.currentPage, step.target, attribute); }
   else if (operation === "extractList") context.outputs[key] = await extractList(context.currentPage, step.target);
   else if (operation === "extractCount") context.outputs[key] = await extractCount(context.currentPage, step.target);
