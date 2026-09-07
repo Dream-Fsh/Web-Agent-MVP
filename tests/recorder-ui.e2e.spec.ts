@@ -32,12 +32,15 @@ test('extension visible UI records, annotates and stops with redacted storage', 
     await ui.getByRole('button', { name: '标记断言', exact: true }).click();
     await page.getByRole('heading', { name: '登录', exact: true }).click();
     await expect(ui.getByTestId('annotations')).toHaveText('Annotations: 3');
+    const worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
+    // Live values stay in Chrome's memory-only session storage until final redaction.
+    const beforeStop = await worker.evaluate(async () => (globalThis as any).chrome.storage.local.get(null));
+    expect(beforeStop).toEqual({});
     await page.screenshot({ path: 'test-results/recorder-ui.png' });
     await ui.getByRole('button', { name: '停止录制', exact: true }).click();
     await expect(ui.getByTestId('recording')).toHaveText('Recording: OFF');
     const count = await ui.getByTestId('events').textContent();
     await page.getByLabel('用户名', { exact: true }).fill('after-stop');
-    const worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
     const stored = await worker.evaluate(async () => (globalThis as any).chrome.storage.local.get(null));
     expect(JSON.stringify(stored)).not.toMatch(/PASSWORD_SECRET|URL_SECRET|after-stop/);
     expect(JSON.stringify(stored)).toContain('[REDACTED]');

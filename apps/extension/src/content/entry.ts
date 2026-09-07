@@ -16,7 +16,7 @@ if (window === window.top) {
     <label>变量名<input id="variable" value="accountId"></label><label>敏感变量<input id="sensitive" type="checkbox"></label>
     <label>输出键<input id="key" value="results"></label>
     <label>提取类型<select id="extraction"><option>extractTable</option><option>extractText</option><option>extractCount</option></select></label>
-    <label>断言类型<select id="assertion"><option>assertElementVisible</option><option>assertText</option></select></label>
+    <label>断言类型<select id="assertion"><option>assertVisible</option><option>assertText</option></select></label>
     <label>预期值<input id="expected"></label>
     <button id="variable-mark">标记变量</button><button id="extraction-mark">标记提取</button><button id="assertion-mark">标记断言</button>
     <p id="target">当前目标：未选择</p><p id="mode">当前模式：普通录制</p><p id="session">当前 Session：无</p><p role="status" id="error"></p></section>`;

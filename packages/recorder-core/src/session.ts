@@ -1,13 +1,8 @@
-import type { RawEvent, Target } from '@web-agent/protocol';
+import { parseRecordingAnnotation, validateAnnotationReferences, type RawEvent, type RecordingAnnotation } from '@web-agent/protocol';
 import { redactSensitiveData } from '@web-agent/safety';
 import { recordCapturedEvent } from './index.js';
 
-// UI marks remain separate from RawEvent; Task 09B supplies the formal protocol.
-export interface RecorderMark {
-  id: string; sessionId: string;
-  type: 'variable' | 'extraction' | 'requiredAssertion';
-  targetActionId?: string; target: Target; metadata: Record<string, unknown>;
-}
+export type RecorderMark = RecordingAnnotation;
 export interface RecorderState {
   sessionId: string; recording: boolean; events: RawEvent[]; annotations: RecorderMark[];
 }
@@ -23,13 +18,25 @@ export function updateRecorder(state: RecorderState, command: { kind: string; ev
   if (command.kind === 'raw-event') {
     if (!state.recording || command.event?.sessionId !== state.sessionId) return state;
     const event = recordCapturedEvent(command.event, () => {});
+    const declaredSecret = state.annotations.some(annotation => {
+      if (annotation.type !== 'variable' || !annotation.metadata.sensitive) return false;
+      const original = state.events.find(previous => previous.id === annotation.targetActionId);
+      return original?.element && JSON.stringify([original.frame, original.element]) === JSON.stringify([event.frame, event.element]);
+    });
+    if (declaredSecret) event.value = '[REDACTED]';
     return { ...state, events: [...state.events, event] };
   }
   if (command.kind === 'annotation') {
     if (!state.recording || command.annotation?.sessionId !== state.sessionId) throw new Error('No matching active session');
     const mark = redactSensitiveData(command.annotation);
     if (mark.metadata.sensitive) mark.metadata.originalValue = '[REDACTED]';
-    return { ...state, annotations: [...state.annotations, mark] };
+    const annotations = [...state.annotations, parseRecordingAnnotation(mark)];
+    validateAnnotationReferences(annotations, state.events, state.sessionId);
+    const referenced = state.events.find(event => event.id === mark.targetActionId);
+    const events = mark.type === 'variable' && mark.metadata.sensitive
+      ? state.events.map(event => event.id === mark.targetActionId || (referenced?.element && JSON.stringify(event.element) === JSON.stringify(referenced.element)) ? { ...event, value: '[REDACTED]' } : event)
+      : state.events;
+    return { ...state, events, annotations };
   }
   return state;
 }
