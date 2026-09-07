@@ -41,7 +41,7 @@
 - [x] Verify complete suite, review and commit.
 
 ## README
-- [ ] Document architecture, supported behavior, loading/recording/replay, safety, V1 limits and commands from tested implementation; review and commit.
+- [x] Document architecture, supported behavior, loading/recording/replay, safety, V1 limits and commands from tested implementation; review and commit.
 
 ## CI
 - [ ] Reproduce clean installation/build checks, implement reproducible dependency ordering as needed.
