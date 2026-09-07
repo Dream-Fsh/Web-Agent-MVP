@@ -11,26 +11,26 @@
 ## 09A: Visible recording controls
 - Files: extension content entry, service-worker entry, popup; recorder-core session state; tests/recorder-ui.e2e.spec.ts.
 - [x] Write and observe failing loaded-extension UI test (missing visible start button).
-- [ ] Implement start/stop, status/count and separate preliminary marks using serialized runtime messages.
-- [ ] Validate sensitive data storage and stopped capture in Chromium.
-- [ ] Run typecheck, unit tests, E2E, build, verify; review diff and commit.
+- [x] Implement start/stop, status/count and separate preliminary marks using serialized runtime messages.
+- [x] Validate sensitive data storage and stopped capture in Chromium.
+- [x] Run typecheck, unit tests, E2E, build, verify; review diff and commit (`4b79f75`).
 
 ## 09B: Formal annotations
 - Files: protocol annotation schema; recorder-core annotation validation; recording-adapter persistence and tests.
-- [ ] RED: invalid schemas/action references; three annotation types; secret value omitted.
-- [ ] Implement parseRecordingAnnotation and session/action validation; independent annotations.json.
-- [ ] Verify complete suite, review and commit.
+- [x] RED: invalid schemas/action references; three annotation types; secret value omitted.
+- [x] Implement parseRecordingAnnotation and session/action validation; independent annotations.json.
+- [x] Verify complete suite, review and commit (`eae8cb6`).
 
 ## 09C: Workflow Builder
 - Files: packages/workflow-builder; normalizer supported operations; package dependency configuration and tests.
-- [ ] RED: RawEvent → normalizeEvents → buildWorkflow → parseWorkflow; variables remove original literal; unique IDs, frame, ordering and unsupported inputs.
-- [ ] Implement pure buildWorkflow(actions, annotations, metadata), validate output.
-- [ ] Verify complete suite, review and commit.
+- [x] RED: RawEvent → normalizeEvents → buildWorkflow → parseWorkflow; variables remove original literal; unique IDs, frame, ordering and unsupported inputs.
+- [x] Implement pure buildWorkflow(actions, annotations, metadata), validate output.
+- [x] Verify complete suite, review and commit (`36be855`).
 
 ## 09D: Versioned persistence
 - Files: workflow-builder persistence module and disk tests.
-- [ ] RED: v1/v2, duplicate/invalid rejection, current pointer, interrupted write.
-- [ ] Validate and stage version file before atomic current pointer promotion, reject competing writers.
+- [x] RED: v1/v2, duplicate/invalid rejection, current pointer, interrupted write.
+- [x] Validate and stage version file before atomic current pointer promotion, reject competing writers.
 - [ ] Verify complete suite, review and commit.
 
 ## 09E: Complete visible UI E2E
