@@ -1,5 +1,6 @@
 import { parseRawEvent, type RawEvent } from "@web-agent/protocol";
 import { redactRawEvent } from "@web-agent/safety";
+export { emptyRecorderState, updateRecorder, type RecorderState, type RecorderMark } from './session.js';
 
 /**
  * Recorder-owned capture input. It deliberately aliases our protocol instead
