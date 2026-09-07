@@ -1,6 +1,6 @@
 import type { ElementSnapshot, RawEvent } from "@web-agent/protocol";
 
-export type NormalizedActionType = "navigate" | "click" | "input" | "submit" | "switchTab" | "upload" | "drag-drop";
+export type NormalizedActionType = "navigate" | "click" | "input" | "select" | "waitFor" | "download" | "submit" | "switchTab" | "upload" | "drag-drop";
 
 export interface ActionContext {
   sessionId: string;
@@ -16,7 +16,7 @@ export interface NormalizedAction {
   context: ActionContext;
   element?: ElementSnapshot;
   value?: string;
-  metadata?: { navigationKind?: "browser" | "spa" };
+  metadata?: Record<string, unknown>;
   sourceEventIds: string[];
 }
 
@@ -55,13 +55,14 @@ function targetKey(element: ElementSnapshot | undefined): string | undefined {
 function toAction(event: RawEvent): NormalizedAction {
   const type: NormalizedActionType = event.type === "navigation" ? "navigate"
     : event.type === "tab-change" ? "switchTab"
-    : event.type === "change" ? "input"
+    : event.type === "change" ? (event.element?.tag === 'select' ? 'select' : 'input')
+    : event.type === 'click' && event.element?.attributes.download !== undefined ? 'download'
     : event.type === "dblclick" ? "click"
     : event.type;
   const navigationKind = event.metadata?.navigationKind;
   return {
     id:event.id, type, timestamp:event.timestamp, url:event.url, context:contextFor(event), element:event.element, value:event.value,
-    ...(navigationKind === "browser" || navigationKind === "spa" ? { metadata:{ navigationKind } } : {}), sourceEventIds:[event.id],
+    ...((navigationKind === "browser" || navigationKind === "spa" || typeof event.metadata?.index === 'number') ? { metadata:{ navigationKind, index: event.metadata?.index } } : {}), sourceEventIds:[event.id],
   };
 }
 
