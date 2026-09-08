@@ -46,4 +46,4 @@
 ## CI
 - [x] Reproduce clean installation/build checks, implement reproducible dependency ordering as needed.
 - [x] PR/push main CI executes all requested commands including Extension E2E with Chromium.
-- [ ] Verify locally; inspect hosted run if publishing is available; report any unverified remote status. Review and commit.
+- [x] Verify locally; hosted CI passed: https://github.com/Dream-Fsh/Web-Agent-MVP/actions/runs/34175924517 (implementation head 089d0b7). Reviewed and committed; main requires verify, including admins.
