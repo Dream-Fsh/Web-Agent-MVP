@@ -12,8 +12,9 @@
   ],
   "scripts": {
     "recorder": "node apps/recording-service/dist/start.js",
-    "build": "npm run build --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
+    "postinstall": "npm run build",
+    "build": "node scripts/build-workspaces.mjs",
+    "test": "node --test scripts/*.test.mjs && npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test:e2e": "npm run build && playwright test",
     "verify": "npm run typecheck && npm test && npm run test:e2e"

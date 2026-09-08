@@ -44,6 +44,6 @@
 - [x] Document architecture, supported behavior, loading/recording/replay, safety, V1 limits and commands from tested implementation; review and commit.
 
 ## CI
-- [ ] Reproduce clean installation/build checks, implement reproducible dependency ordering as needed.
-- [ ] PR/push main CI executes all requested commands including Extension E2E with Chromium.
+- [x] Reproduce clean installation/build checks, implement reproducible dependency ordering as needed.
+- [x] PR/push main CI executes all requested commands including Extension E2E with Chromium.
 - [ ] Verify locally; inspect hosted run if publishing is available; report any unverified remote status. Review and commit.

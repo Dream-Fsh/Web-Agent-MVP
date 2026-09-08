@@ -19,7 +19,7 @@ RawEvent 与 RecordingAnnotation 独立保存。UI 不构造 Workflow Step；Bui
 
 Completed：Protocol、Fixture、Safety / Redaction、Recorder Core、Recording Adapter、Normalizer、Locator Engine、Generic Runner、Assertions、Extraction、Failure Package、Repair Patch foundation、Integration Hardening。
 
-Current：User-visible Record-to-Workflow。09A–09E 已通过本地验收：77 个单元测试、4 个 Playwright E2E；包括真实加载 Extension、点击录制与标注、生成文件、替换账户变量重跑，以及 required assertion 失败分支。完整 Task 09 还要求 GitHub CI 实际通过；配置和运行状态见仓库 Actions，不能仅凭本地结果视作已通过。
+Current：User-visible Record-to-Workflow。09A–09E 已通过本地验收：77 个包单元测试、2 个构建脚本测试、4 个 Playwright E2E；包括真实加载 Extension、点击录制与标注、生成文件、替换账户变量重跑，以及 required assertion 失败分支。GitHub CI 配置见 [.github/workflows/ci.yml](.github/workflows/ci.yml)，最新运行结果见 [Actions](https://github.com/Dream-Fsh/Web-Agent-MVP/actions/workflows/ci.yml)。Task 09 验收要求本地与托管 CI 都通过。
 
 Next：CLI Production Wiring，之后才是经授权的 Real-site Read-only Pilot。当前 CLI 仍是基础骨架，不能用 placeholder 命令作为真实执行证据。
 
@@ -37,7 +37,7 @@ npm run test:e2e
 npm run verify
 ```
 
-`test:e2e` 会先 build，再执行所有 E2E；`verify` 执行 typecheck、单元测试和 test:e2e。首次安装的工作区构建顺序正在 CI 阶段完善；若首次 typecheck 提示依赖声明缺失，先完成 build，不要跳过检查。
+`test:e2e` 会先 build，再执行所有 E2E；`verify` 执行 typecheck、单元测试和 test:e2e。`npm ci` 的 postinstall 会按工作区依赖顺序 build，因此全新安装后可直接 typecheck；不要使用 `--ignore-scripts` 后直接跳过构建。CI 在 PR 和 push main 时执行全部命令，不跳过 Extension E2E。
 
 ## Extension 开发与加载
 
