@@ -8,7 +8,7 @@ data/recordings/
 data/runs/
 data/failures/
 data/task09-evidence/
-workflows/
+/workflows/
 .env
 .env.*
 !.env.example
