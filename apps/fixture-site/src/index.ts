@@ -46,7 +46,7 @@ function ajaxPaginationPage(): string {
 
 function render(url: URL): string {
   switch (url.pathname) {
-    case "/login": return document("登录", '<label>用户名 <input name="username"></label><label>密码 <input type="password" name="password"></label><button type="button">登录</button>');
+    case "/login": return document("登录", '<label>用户名 <input name="username"></label><label>密码 <input type="password" name="password"></label><button type="button">登录</button><script>document.querySelector("button").onclick=()=>{localStorage.setItem("fixture-user",document.querySelector("input[name=username]").value);document.querySelector("input[name=password]").value="";location.href="/dashboard";}</script>');
     case "/dashboard": return document("广告后台", '<a href="/rta">RTA 策略</a><a href="/dynamic">动态定位器</a>');
     case "/rta": return rtaPage(url);
     case "/dynamic": {

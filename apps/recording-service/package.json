@@ -1,1 +1,20 @@
-{"name":"@web-agent/recording-service","version":"0.1.0","private":true,"type":"module","main":"./dist/index.js","types":"./dist/index.d.ts","dependencies":{"@web-agent/protocol":"*","@web-agent/recording-adapter":"*","@web-agent/normalizer":"*","@web-agent/workflow-builder":"*"},"scripts":{"build":"tsc --project tsconfig.json","typecheck":"tsc --project tsconfig.json --noEmit","test":"vitest run --passWithNoTests"}}
+{
+  "name": "@web-agent/recording-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "dependencies": {
+    "@web-agent/protocol": "*",
+    "@web-agent/recording-adapter": "*",
+    "@web-agent/normalizer": "*",
+    "@web-agent/workflow-builder": "*",
+    "@web-agent/runner": "*"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  }
+}

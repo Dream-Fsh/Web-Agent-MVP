@@ -12,3 +12,6 @@ data/task09-evidence/
 .env
 .env.*
 !.env.example
+
+data/task10a-evidence/
+/task10a-*.log

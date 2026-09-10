@@ -18,7 +18,7 @@ async function readBody(request: IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-export async function startRecordingService(options: { root: string; port?: number }): Promise<{ baseUrl: string; capability: string; close: () => Promise<void> }> {
+export async function startRecordingService(options: { root: string; port?: number; onSessionStarted?:(id:string)=>void; onWorkflowSaved?:(saved:{path:string;version:number})=>void }): Promise<{ baseUrl: string; capability: string; close: () => Promise<void> }> {
   const root = resolve(options.root);
   const capability = randomBytes(24).toString('hex');
   let expectedHost = '';
@@ -32,6 +32,15 @@ export async function startRecordingService(options: { root: string; port?: numb
     if (request.method === 'OPTIONS') { response.writeHead(204).end(); return; }
     if (request.headers.authorization !== `Bearer ${capability}`) { response.writeHead(401).end(); return; }
     if (request.method === 'GET' && request.url === '/health') { response.writeHead(200, { 'content-type': 'application/json' }).end('{"ready":true}'); return; }
+    if (request.method === 'POST' && request.url === '/sessions/start') {
+      try {
+        const input=await readBody(request) as {sessionId?:unknown};
+        if(typeof input?.sessionId!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(input.sessionId))throw new Error('Invalid session');
+        options.onSessionStarted?.(input.sessionId);
+        response.writeHead(204).end();
+      }catch{response.writeHead(400).end();}
+      return;
+    }
     if (request.method !== 'POST' || request.url !== '/recordings') { response.writeHead(404).end(); return; }
     try {
       const input = await readBody(request) as { sessionId?: unknown; events?: unknown; annotations?: unknown };
@@ -45,6 +54,7 @@ export async function startRecordingService(options: { root: string; port?: numb
       const workflow = buildWorkflow(actions, annotations, { id: input.sessionId, sessionId: input.sessionId, name: '录制查询', startUrl: events[0].url, createdAt: new Date().toISOString() });
       const saved = await saveWorkflow(workflow, join(root, 'workflows'));
       response.writeHead(201, { 'content-type': 'application/json' }).end(JSON.stringify(saved));
+      try { options.onWorkflowSaved?.(saved); } catch { /* An observer cannot undo committed persistence. */ }
     } catch {
       // Neither captured values nor request credentials belong in diagnostics.
       response.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: '录制校验或 Workflow 保存失败；已保存的录制可供检查。' }));
@@ -56,3 +66,5 @@ export async function startRecordingService(options: { root: string; port?: numb
   expectedHost = `127.0.0.1:${address.port}`;
   return { baseUrl: `http://${expectedHost}`, capability, close: () => new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }) };
 }
+
+export { startInteractiveRecording } from './interactive.js';

@@ -1,5 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { loadWorkflow, rollbackStoredWorkflow, saveWorkflow } from '@web-agent/workflow-builder/persistence';
 import { z } from "zod";
 import { parseWorkflow, type LocatorCandidate, type Workflow } from "@web-agent/protocol";
 import { assertStepAllowed, redactWorkflow } from "@web-agent/safety";
@@ -74,23 +73,20 @@ export function applyRepairPatch(workflow: Workflow, input: unknown): Workflow {
   return validated;
 }
 
-function safeName(name: string): string { if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(name)) throw new Error("Workflow name must be a safe path segment"); return name; }
 export async function saveWorkflowVersion(root: string, name: string, workflow: Workflow): Promise<string> {
   const validated = parseWorkflow(redactWorkflow(workflow));
-  const folder = join(root, safeName(name));
-  await mkdir(folder, { recursive:true });
-  const versionPath = join(folder, `v${validated.version}.json`);
-  const body = `${JSON.stringify(validated, null, 2)}\n`;
-  await writeFile(versionPath, body, { encoding:"utf8", flag:"wx" });
-  await writeFile(join(folder, "current.json"), body, "utf8");
-  return versionPath;
+  if (name !== validated.id) throw new Error('Workflow identity mismatch');
+  return (await saveWorkflow(validated, root, { version: validated.version })).path;
 }
 
 export interface RepairReplayResult { requiredAssertionsPassed: boolean }
 export type RepairReplay = (workflow: Workflow) => Promise<RepairReplayResult>;
 
 /** Promotes a temporary patch only after replay passes every required assertion. */
-export async function promoteRepairPatch(root: string, name: string, workflow: Workflow, patch: unknown, replay: RepairReplay): Promise<Workflow> {
+export async function promoteRepairPatch(root: string, name: string, workflow: Workflow, patch: unknown, replay: RepairReplay, signal?:AbortSignal): Promise<Workflow> {
+  signal?.throwIfAborted();
+  const current = await loadWorkflow(root, name);
+  if (current.id !== workflow.id || current.version !== workflow.version) throw new RepairPatchRejectedError('Stale workflow version', 'STALE_PATCH');
   const temporary = applyRepairPatch(workflow, patch);
   const replayResult = await replay(temporary);
   if (!replayResult.requiredAssertionsPassed) {
@@ -101,12 +97,9 @@ export async function promoteRepairPatch(root: string, name: string, workflow: W
     version:workflow.version + 1,
     metadata:{ ...temporary.metadata, updatedAt:new Date().toISOString() },
   };
-  await saveWorkflowVersion(root, name, promoted);
-  return promoted;
+  const saved = await saveWorkflow(redactWorkflow(promoted), root, { expectedCurrentVersion: workflow.version, signal });
+  return { ...promoted, version: saved.version };
 }
 export async function rollbackWorkflow(root: string, name: string, version: number): Promise<void> {
-  const folder = join(root, safeName(name));
-  const body = await readFile(join(folder, `v${version}.json`), "utf8");
-  parseWorkflow(JSON.parse(body));
-  await writeFile(join(folder, "current.json"), body, "utf8");
+  await rollbackStoredWorkflow(root, name, version);
 }

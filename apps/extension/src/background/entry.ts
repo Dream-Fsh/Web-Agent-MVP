@@ -32,6 +32,9 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, reply: (value: 
     const next: RecorderState & { connected?: boolean; savedPath?: string; saveError?: string } = updateRecorder(state, message);
     next.connected = Boolean(connection);
     await chrome.storage.session.set({ [key]: next });
+    if (message.kind === 'start' && connection) {
+      await fetch(`${connection.endpoint}/sessions/start`, {method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${connection.capability}`},body:JSON.stringify({sessionId:next.sessionId}),signal:AbortSignal.timeout(5000)}).catch(()=>undefined);
+    }
     if (message.kind === 'stop') {
       await chrome.storage.local.set({ [key]: next });
       if (connection) {
