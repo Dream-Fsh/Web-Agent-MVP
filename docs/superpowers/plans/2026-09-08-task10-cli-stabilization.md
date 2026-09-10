@@ -30,8 +30,8 @@
 
 ## 10D — Pilot preparation
 
-- [ ] Add docs/pilot-readonly.md with allowed read actions, prohibited writes, independent profile and manual first repair review. Do not connect a real advertising site.
-- [ ] Validate, review and commit.
+- [x] Add docs/pilot-readonly.md with allowed read actions, prohibited writes, independent profile and manual first repair review. Do not connect a real advertising site.
+- [x] Validate, review and commit.
 
 ## 10E / 10F — Documentation and CI
 
