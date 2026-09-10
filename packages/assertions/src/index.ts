@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Page, Frame } from "@playwright/test";
 import type { Target } from "@web-agent/protocol";
 import { resolveCollectionTarget, resolveSingleTarget } from "@web-agent/locator-engine";
 
@@ -6,7 +6,7 @@ export type AssertionType = "assertVisible" | "assertText" | "assertUrl" | "asse
 export interface Assertion { id: string; type: AssertionType; target?: Target; expected?: string | number; attribute?: string; required?: boolean }
 export interface AssertionResult { id: string; status: "passed" | "failed"; required: boolean; message?: string }
 
-export async function evaluateAssertions(page: Page, assertions: Assertion[]): Promise<{ success: boolean; results: AssertionResult[] }> {
+export async function evaluateAssertions(page: Page | Frame, assertions: Assertion[]): Promise<{ success: boolean; results: AssertionResult[] }> {
   const results: AssertionResult[] = [];
   for (const assertion of assertions) {
     try {

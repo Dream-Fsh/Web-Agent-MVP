@@ -25,8 +25,8 @@
 
 ## 10C — Multiple contexts
 
-- [ ] RED visible iframe input/click/extract and new-tab continuation E2E.
-- [ ] Preserve frame/tab identity and wire correct frame/currentPage using existing execution primitives; verify and commit.
+- [x] RED visible iframe input/click/extract and new-tab continuation E2E.
+- [x] Preserve frame/tab identity and wire correct frame/currentPage using existing execution primitives; verify and commit.
 
 ## 10D — Pilot preparation
 

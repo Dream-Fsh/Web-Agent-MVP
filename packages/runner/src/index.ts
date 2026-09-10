@@ -1,3 +1,4 @@
+import {stepScope} from './frame.js';
 import type { Page } from "@playwright/test";
 import { parseWorkflow, type Workflow, type WorkflowStep } from "@web-agent/protocol";
 import { assertStepAllowed, type SafetyPolicy } from "@web-agent/safety";
@@ -22,18 +23,18 @@ async function executeExtract(context: RunContext, step: WorkflowStep): Promise<
   const operation = step.parameters?.operation;
   const key = step.parameters?.key;
   if (typeof operation !== "string" || typeof key !== "string") throw new Error("Extract steps require operation and key");
-  if (operation === "extractText") context.outputs[key] = await extractText(context.currentPage, step.target);
-  else if (operation === 'extractTable') context.outputs[key] = await extractTable(context.currentPage, step.target);
-  else if (operation === "extractAttribute") { const attribute = step.parameters?.attribute; if (typeof attribute !== "string") throw new Error("extractAttribute requires attribute"); context.outputs[key] = await extractAttribute(context.currentPage, step.target, attribute); }
-  else if (operation === "extractList") context.outputs[key] = await extractList(context.currentPage, step.target);
-  else if (operation === "extractCount") context.outputs[key] = await extractCount(context.currentPage, step.target);
+  if (operation === "extractText") context.outputs[key] = await extractText(await stepScope(context,step), step.target);
+  else if (operation === 'extractTable') context.outputs[key] = await extractTable(await stepScope(context,step), step.target);
+  else if (operation === "extractAttribute") { const attribute = step.parameters?.attribute; if (typeof attribute !== "string") throw new Error("extractAttribute requires attribute"); context.outputs[key] = await extractAttribute(await stepScope(context,step), step.target, attribute); }
+  else if (operation === "extractList") context.outputs[key] = await extractList(await stepScope(context,step), step.target);
+  else if (operation === "extractCount") context.outputs[key] = await extractCount(await stepScope(context,step), step.target);
   else throw new Error(`Unsupported extraction operation: ${operation}`);
 }
 
 /** Runs a validated Workflow directly through Safety, Locator Engine, and Playwright. */
 export async function runWorkflow(page: Page, input: Workflow, options: RunOptions = {}): Promise<RunResult> {
   const workflow = parseWorkflow(input);
-  const context: RunContext = { currentPage:page, browserContext:page.context(), variables:options.variables ?? {}, outputs:{}, downloads:[], policy:options.policy ?? { mode:"read-only" }, runId:options.runId ?? crypto.randomUUID() };
+  const context: RunContext = { currentPage:page, recordingStartPage:page, existingPages:page.context().pages(), browserContext:page.context(), variables:options.variables ?? {}, outputs:{}, downloads:[], policy:options.policy ?? { mode:"read-only" }, runId:options.runId ?? crypto.randomUUID() };
   const startedAt = new Date().toISOString();
   const steps: RunStepResult[] = [];
   await context.currentPage.goto(workflow.startUrl, { waitUntil:"domcontentloaded" });
@@ -53,7 +54,7 @@ export async function runWorkflow(page: Page, input: Workflow, options: RunOptio
         case "assert": {
           const assertions = resolvedStep.parameters?.assertions;
           if (!Array.isArray(assertions)) throw new Error("Assert steps require assertions");
-          const result = await evaluateAssertions(context.currentPage, assertions as Assertion[]);
+          const result = await evaluateAssertions(await stepScope(context,resolvedStep), assertions as Assertion[]);
           context.outputs[step.id] = result;
           if (!result.success) return { runId:context.runId, workflowId:workflow.id, status:"failed", steps:[...steps, { id:step.id, type:step.type, status:"failed", message:"Required assertions failed" }], outputs:context.outputs, downloads:context.downloads, startedAt, finishedAt:new Date().toISOString() };
           break;

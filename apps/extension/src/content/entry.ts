@@ -4,7 +4,7 @@ import { redactRawEvent } from '@web-agent/safety';
 import type { Target } from '@web-agent/protocol';
 declare const chrome: any;
 
-if (window === window.top) {
+{
   const initialize = async () => {
     const host = document.createElement('web-agent-recorder');
     host.style.cssText = 'position:fixed;right:16px;top:16px;z-index:2147483647';
@@ -21,7 +21,17 @@ if (window === window.top) {
     <label>预期值<input id="expected"></label>
     <button id="variable-mark">标记变量</button><button id="extraction-mark">标记提取</button><button id="assertion-mark">标记断言</button>
     <p id="target">当前目标：未选择</p><p id="mode">当前模式：普通录制</p><p id="session">当前 Session：无</p><p role="status" id="error"></p></section>`;
-    document.documentElement.append(host);
+    if(window===window.top)document.documentElement.append(host);
+    const frameContext=()=>{
+      const framePath:string[]=[];let current:Window=window;
+      while(current!==current.top){
+        const frame=current.frameElement;if(!frame)throw new Error('当前跨域 frame 尚不支持录制');
+        const selector=frame.id?`iframe#${CSS.escape(frame.id)}`:frame.getAttribute('name')?`iframe[name="${CSS.escape(frame.getAttribute('name')!)}"]`:frame.getAttribute('title')?`iframe[title="${CSS.escape(frame.getAttribute('title')!)}"]`:undefined;
+        if(!selector||frame.ownerDocument.querySelectorAll(selector).length!==1)throw new Error('Frame 缺少唯一标识');
+        framePath.unshift(selector);current=current.parent;
+      }
+      return {frameId:0,framePath};
+    };
     let state: RecorderState & { connected?: boolean; savedPath?: string; saveError?: string };
     let stop: (() => void) | undefined;
     let mode: RecorderMark['type'] | undefined;
@@ -43,7 +53,7 @@ if (window === window.top) {
     const capture = () => {
       stop?.(); stop = undefined;
       if (state.recording) stop = startDomRecorder(document, {
-        context: { sessionId: state.sessionId, url: location.href, frame: { frameId: 0, framePath: [] } },
+        context: { sessionId: state.sessionId, url: location.href, frame: frameContext() },
         persist: event => { void send({ kind: 'raw-event', event }).catch(showError); },
       });
     };
@@ -57,7 +67,9 @@ if (window === window.top) {
       get(id).onclick = event => {
         if (!event.isTrusted) return;
         if (!state.recording) { showError(new Error('请先开始录制')); return; }
-        mode = type; get('mode').textContent = `当前模式：${type}，请点击页面目标`;
+        mode = type;
+        void send({kind:'mark-mode',markMode:type,fields:Object.fromEntries(['variable','key','extraction','assertion','expected'].map(id=>[id,value(id)])),sensitive:(get('sensitive') as HTMLInputElement).checked}).catch(showError);
+        get('mode').textContent = `当前模式：${type}，请点击页面目标`;
       };
     }
     document.addEventListener('click', event => {
@@ -65,20 +77,26 @@ if (window === window.top) {
       event.preventDefault(); event.stopImmediatePropagation();
       const selected = mode === 'extraction' && value('extraction') === 'extractTable' ? event.target.closest('table') ?? event.target : event.target;
       const element = snapshot(selected);
-      const safe = redactRawEvent({ schemaVersion: '1.0', id: crypto.randomUUID(), sessionId: state.sessionId, timestamp: Date.now(), type: 'input', url: location.href, frame: { frameId: 0, framePath: [] }, element,
+      const safe = redactRawEvent({ schemaVersion: '1.0', id: crypto.randomUUID(), sessionId: state.sessionId, timestamp: Date.now(), type: 'input', url: location.href, frame: frameContext(), element,
         value: event.target instanceof HTMLInputElement ? event.target.value : undefined });
       const name = element.attributes.name;
       const css = element.testId ? `[data-testid="${CSS.escape(element.testId)}"]` : element.attributes.id ? `#${CSS.escape(element.attributes.id)}` : name ? `${element.tag}[name="${CSS.escape(name)}"]` : element.tag;
       if (document.querySelectorAll(css).length !== 1) { showError(new Error('目标不唯一，请选择具有稳定标识的元素。')); return; }
       const target: Target = { fingerprint: { tag: element.tag, role: element.role }, locators: [{ strategy: 'css', value: css, score: 0.8 }] };
-      const action = [...state.events].reverse().find(e => e.element?.attributes.name === name && e.element?.tag === element.tag && e.type === 'input');
+      const action = [...state.events].reverse().find(e => e.element?.attributes.name === name && e.element?.tag === element.tag && e.type === 'input' && JSON.stringify(e.frame.framePath)===JSON.stringify(frameContext().framePath));
       const metadata = mode === 'variable' ? { variableName: value('variable'), originalValue: safe.value, sensitive: (get('sensitive') as HTMLInputElement).checked || safe.value === '[REDACTED]' }
         : mode === 'extraction' ? { operation: value('extraction'), key: value('key') }
         : { assertionType: value('assertion'), expected: value('expected'), required: true };
-      const annotation: RecorderMark = { id: crypto.randomUUID(), sessionId: state.sessionId, type: mode, target, targetActionId: mode === 'variable' ? action?.id : state.events.at(-1)?.id, metadata };
+      const annotation: RecorderMark = { id: crypto.randomUUID(), sessionId: state.sessionId, type: mode, target, targetActionId: mode === 'variable' ? action?.id : [...state.events].reverse().find(e=>JSON.stringify(e.frame.framePath)===JSON.stringify(frameContext().framePath))?.id, metadata };
       mode = undefined; get('mode').textContent = '当前模式：普通录制'; get('target').textContent = `当前目标：${css}`;
       void send({ kind: 'annotation', annotation }).catch(showError);
     }, true);
+    chrome.runtime.onMessage.addListener((message:any)=>{
+      if(message.scope!=='recorder-state')return;
+      if(message.markMode){mode=message.markMode;for(const [id,text] of Object.entries(message.fields??{}))(get(id) as HTMLInputElement).value=String(text);(get('sensitive') as HTMLInputElement).checked=Boolean(message.sensitive);}
+      if(message.clearMode)mode=undefined;
+      if(message.state){const changed=!state||state.sessionId!==message.state.sessionId||state.recording!==message.state.recording;state=message.state;draw();if(changed)capture();}
+    });
     await send({ kind: 'status' }); capture();
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { void initialize(); }, { once: true });

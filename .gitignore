@@ -18,3 +18,4 @@ data/task10a-evidence/
 /task10b-*.log
 data/recording.lock*/
 data/browser-profile.lock*/
+/task10c-*.log

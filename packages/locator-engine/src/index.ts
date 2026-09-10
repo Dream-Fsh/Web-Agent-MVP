@@ -1,4 +1,4 @@
-import type { Locator, Page } from "@playwright/test";
+import type { Locator, Page, Frame } from "@playwright/test";
 import type { LocatorCandidate, Target } from "@web-agent/protocol";
 
 export interface DiscoveredCandidate {
@@ -38,7 +38,7 @@ function assertSafeCss(value: string): void {
   }
 }
 
-function locatorFor(page: Page, target: Target, candidate: LocatorCandidate): Locator {
+function locatorFor(page: Page | Frame, target: Target, candidate: LocatorCandidate): Locator {
   switch (candidate.strategy) {
     case "testId": return page.getByTestId(candidate.value);
     case "role": {
@@ -59,7 +59,7 @@ function locatorFor(page: Page, target: Target, candidate: LocatorCandidate): Lo
 }
 
 /** Discovers protocol candidates in the fixed stability order. */
-export function discoverCandidates(page: Page, target: Target): DiscoveredCandidate[] {
+export function discoverCandidates(page: Page | Frame, target: Target): DiscoveredCandidate[] {
   return [...target.locators]
     .sort((left, right) => strategyPriority[left.strategy] - strategyPriority[right.strategy] || right.score - left.score)
     .map((candidate) => ({ candidate, locator:locatorFor(page, target, candidate), priority:strategyPriority[candidate.strategy] }));
@@ -105,7 +105,7 @@ async function resolveElementIdentities(locator: Locator): Promise<string[]> {
   });
 }
 
-async function collectCandidateMatches(page: Page, target: Target): Promise<CandidateMatch[]> {
+async function collectCandidateMatches(page: Page | Frame, target: Target): Promise<CandidateMatch[]> {
   const matches: CandidateMatch[] = [];
   for (const discovered of discoverCandidates(page, target)) {
     const matchCount = await discovered.locator.count();
@@ -135,7 +135,7 @@ function identityMatches(matches: CandidateMatch[]): IdentityMatch[] {
  * Resolves only a unique runtime match. It intentionally never calls
  * Locator.first(): ambiguity is a surfaced condition, not a hidden choice.
  */
-export async function resolveCollectionTarget(page: Page, target: Target): Promise<ResolvedCollectionTarget> {
+export async function resolveCollectionTarget(page: Page | Frame, target: Target): Promise<ResolvedCollectionTarget> {
   const matches = await collectCandidateMatches(page, target);
   const resolved = identityMatches(matches);
   if (resolved.length === 0) {
@@ -152,7 +152,7 @@ export async function resolveCollectionTarget(page: Page, target: Target): Promi
  * evaluated and clustered by DOM identity. It intentionally never calls
  * Locator.first(): ambiguity is surfaced instead of silently hidden.
  */
-export async function resolveSingleTarget(page: Page, target: Target): Promise<ResolvedTarget> {
+export async function resolveSingleTarget(page: Page | Frame, target: Target): Promise<ResolvedTarget> {
   const matches = await collectCandidateMatches(page, target);
   const resolved = identityMatches(matches);
   if (resolved.length === 0) {
