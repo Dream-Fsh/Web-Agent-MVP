@@ -60,3 +60,13 @@ it('does not publish a cancelled version or change current',async()=>{
     await expect(fs.readFile(join(root,'query/v2.json'))).rejects.toThrow();
   }finally{await fs.rm(root,{recursive:true,force:true});}
 });
+
+it('holds a recoverable owner lease while publishing a workflow',async()=>{
+  const root=await fs.mkdtemp(join(tmpdir(),'workflow-owner-'));
+  const originalLink=fs.link;
+  const link=vi.spyOn(fs,'link').mockImplementation(async(from,to)=>{
+    const owner=JSON.parse(await fs.readFile(join(root,'query/.writer.lock/owner.json'),'utf8'));
+    expect(owner.pid).toBe(process.pid);await originalLink(from,to);
+  });
+  try{await persistence.saveWorkflow(generated(),root);}finally{link.mockRestore();await fs.rm(root,{recursive:true,force:true});}
+});

@@ -11,6 +11,6 @@ it('rejects unpaired, foreign-origin, and malformed requests without creating fi
     expect((await fetch(`${bridge.baseUrl}/recordings`, { method: 'POST', body: '{}' })).status).toBe(401);
     expect((await fetch(`${bridge.baseUrl}/recordings`, { method: 'POST', headers: { authorization: `Bearer ${bridge.capability}`, origin: 'https://untrusted.example' }, body: '{}' })).status).toBe(403);
     expect((await fetch(`${bridge.baseUrl}/recordings`, { method: 'POST', headers: { authorization: `Bearer ${bridge.capability}` }, body: '{}' })).status).toBe(400);
-    expect(await readdir(root)).toEqual([]);
+    expect(await readdir(join(root,'data'))).toEqual(['recording.lock']);
   } finally { await bridge.close(); await rm(root, { recursive: true, force: true }); }
 });

@@ -1,3 +1,4 @@
+import {acquirePersistenceLease} from './lease.js';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { parseWorkflow } from '@web-agent/protocol';
@@ -16,7 +17,7 @@ export async function saveWorkflow(input: unknown, root: string, options: { vers
   const directory = join(root, workflow.id);
   await fs.mkdir(directory, { recursive: true });
   const lockPath = join(directory, '.writer.lock');
-  const lock = await fs.open(lockPath, 'wx');
+  const lock = await acquirePersistenceLease(lockPath);
   const nonce = crypto.randomUUID();
   const stagedVersion = join(directory, `.version-${nonce}.tmp`);
   const stagedCurrent = join(directory, `.current-${nonce}.tmp`);
@@ -46,6 +47,7 @@ export async function saveWorkflow(input: unknown, root: string, options: { vers
     await fs.link(stagedVersion, path);
     installedPath = path;
     await writeSynced(stagedCurrent, { currentVersion: version });
+    await lock.assertOwned();
     options.signal?.throwIfAborted();
     await fs.rename(stagedCurrent, join(directory, 'current.json'));
     promoted = true;
@@ -57,7 +59,7 @@ export async function saveWorkflow(input: unknown, root: string, options: { vers
     await fs.rm(stagedVersion, { force: true });
     await fs.rm(stagedCurrent, { force: true });
     await lock.close();
-    await fs.unlink(lockPath);
+
   }
 }
 
@@ -91,11 +93,14 @@ export async function listWorkflows(root: string) {
 export async function rollbackStoredWorkflow(root: string, id: string, version: number): Promise<void> {
   const directory = workflowDirectory(root, id);
   const lockPath = join(directory, '.writer.lock');
-  const lock = await fs.open(lockPath, 'wx');
+  const lock = await acquirePersistenceLease(lockPath);
   const staged = join(directory, `.current-${crypto.randomUUID()}.tmp`);
   try {
     await loadWorkflow(root, id, version);
     await writeSynced(staged, { currentVersion: version });
     await fs.rename(staged, join(directory, 'current.json'));
-  } finally { await fs.rm(staged, { force: true }); await lock.close(); await fs.unlink(lockPath); }
+  } finally { await fs.rm(staged, { force: true }); await lock.close();  }
 }
+
+export {acquirePersistenceLease,recoverPersistenceLease} from './lease.js';
+export type {LeaseRecovery} from './lease.js';

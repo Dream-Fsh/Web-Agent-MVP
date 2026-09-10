@@ -72,3 +72,15 @@ it.each([1,true])('keeps protocol fields valid while omitting a sensitive defaul
   expect(parseWorkflow(snapshot).version).toBe(1);
   expect(snapshot.variables.accountId).toEqual({required:true,sensitive:true});
 });
+
+it('does not touch an occupied automation profile before acquiring its lease',async()=>{
+  const {acquirePersistenceLease}=await import('@web-agent/workflow-builder/persistence');
+  const {openAutomationBrowser}=await import('./browser.js');
+  const root=await mkdtemp(join(tmpdir(),'profile-exclusive-'));
+  const lease=await acquirePersistenceLease(join(root,'data/browser-profile.lock'),{heartbeatMs:0});
+  try{
+    const outcome=await openAutomationBrowser({root,headless:true}).then(async opened=>{await opened.context.close();return 'opened';},()=> 'blocked');
+    expect(outcome).toBe('blocked');
+    await expect(readFile(join(root,'data/browser-profile/Default/Preferences'))).rejects.toThrow();
+  }finally{await lease.close();await rm(root,{recursive:true,force:true});}
+});

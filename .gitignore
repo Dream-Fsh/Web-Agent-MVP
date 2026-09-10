@@ -15,3 +15,6 @@ data/task09-evidence/
 
 data/task10a-evidence/
 /task10a-*.log
+/task10b-*.log
+data/recording.lock*/
+data/browser-profile.lock*/

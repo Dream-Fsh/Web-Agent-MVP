@@ -8,6 +8,7 @@ import { parseArguments } from './arguments.js';
 export interface CliOptions { root?:string; workflowsRoot?:string; onOutput?:(line:string)=>void; onExitCode?:(code:number)=>void; signal?:AbortSignal }
 const help = `web-agent login [--url URL]
 web-agent record [--url URL]
+web-agent recording recover
 web-agent workflow list
 web-agent workflow inspect <id>
 web-agent workflow history <id>
@@ -24,6 +25,10 @@ export async function runCli(args:string[],options:CliOptions={}):Promise<string
   const root=resolve(parsed.root ?? options.root ?? process.cwd());
   const workflowsRoot=options.workflowsRoot ?? join(root,'workflows');
   const output=options.onOutput ?? (()=>{});
+  if(command==='recording' && subcommand==='recover' && parsed.positional.length===2){
+    const {recoverRecordings}=await import('@web-agent/recording-service');
+    return (await recoverRecordings(root)).map(result=>`${result.status}\t${result.path}${result.archive?'\t'+result.archive:''}`).join('\n');
+  }
   if(command==='workflow') {
     if(subcommand==='list' && parsed.positional.length===2) {
       const list=await listWorkflows(workflowsRoot);

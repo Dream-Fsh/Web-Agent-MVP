@@ -20,8 +20,8 @@
 
 ## 10B — Session recovery
 
-- [ ] RED heartbeat, active/stale/abandoned detection, recovery audit log and new session after abandonment.
-- [ ] Implement explicit recording recover without deleting lock history; verify and commit.
+- [x] RED heartbeat, active/stale/abandoned detection, recovery audit log and new session after abandonment.
+- [x] Implement explicit recording recover without deleting lock history; verify and commit.
 
 ## 10C — Multiple contexts
 

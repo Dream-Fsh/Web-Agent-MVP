@@ -12,3 +12,13 @@ it('reports the actual extension session start to the CLI without inventing a se
     expect(response.status).toBe(204);expect(sessions).toEqual(['actual-extension-session']);
   }finally{await service.close();await rm(root,{recursive:true,force:true});}
 });
+
+it('tracks a live recording service lease and recovery refuses to steal it',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'record-lease-'));
+  const service=await startRecordingService({root});
+  try{
+    const recovery=await import('./index.js');
+    expect(recovery).toHaveProperty('recoverRecordings');
+    expect(await recovery.recoverRecordings(root)).toEqual(expect.arrayContaining([expect.objectContaining({status:'active'})]));
+  }finally{await service.close();await rm(root,{recursive:true,force:true});}
+});

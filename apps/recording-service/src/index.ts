@@ -6,7 +6,7 @@ import { parseRawEvent, parseRecordingAnnotation } from '@web-agent/protocol';
 import { persistRawRecording } from '@web-agent/recording-adapter';
 import { normalizeEvents } from '@web-agent/normalizer';
 import { buildWorkflow } from '@web-agent/workflow-builder';
-import { saveWorkflow } from '@web-agent/workflow-builder/persistence';
+import { saveWorkflow,acquirePersistenceLease } from '@web-agent/workflow-builder/persistence';
 
 async function readBody(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = []; let size = 0;
@@ -18,8 +18,9 @@ async function readBody(request: IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-export async function startRecordingService(options: { root: string; port?: number; onSessionStarted?:(id:string)=>void; onWorkflowSaved?:(saved:{path:string;version:number})=>void }): Promise<{ baseUrl: string; capability: string; close: () => Promise<void> }> {
+export async function startRecordingService(options: { root: string; port?: number; leaseOptions?:{heartbeatMs?:number;timeoutMs?:number}; onSessionStarted?:(id:string)=>void; onWorkflowSaved?:(saved:{path:string;version:number})=>void }): Promise<{ baseUrl: string; capability: string; close: () => Promise<void> }> {
   const root = resolve(options.root);
+  const lease=await acquirePersistenceLease(join(root,'data/recording.lock'),options.leaseOptions);
   const capability = randomBytes(24).toString('hex');
   let expectedHost = '';
   const server = createServer(async (request, response) => {
@@ -36,6 +37,7 @@ export async function startRecordingService(options: { root: string; port?: numb
       try {
         const input=await readBody(request) as {sessionId?:unknown};
         if(typeof input?.sessionId!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(input.sessionId))throw new Error('Invalid session');
+        await lease.heartbeat(input.sessionId);
         options.onSessionStarted?.(input.sessionId);
         response.writeHead(204).end();
       }catch{response.writeHead(400).end();}
@@ -45,6 +47,7 @@ export async function startRecordingService(options: { root: string; port?: numb
     try {
       const input = await readBody(request) as { sessionId?: unknown; events?: unknown; annotations?: unknown };
       if (!input || typeof input.sessionId !== 'string' || !Array.isArray(input.events) || !input.events.length || !Array.isArray(input.annotations)) throw new Error('Invalid recording envelope');
+      await lease.assertOwned();
       const location = await persistRawRecording({ sessionId: input.sessionId, events: input.events, annotations: input.annotations }, join(root, 'data/recordings'));
       // Consume the validated, redacted persisted representation, never the incoming payload.
       const events = (await readFile(location.rawEventsPath, 'utf8')).trim().split('\n').map(line => parseRawEvent(JSON.parse(line)));
@@ -60,11 +63,13 @@ export async function startRecordingService(options: { root: string; port?: numb
       response.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: '录制校验或 Workflow 保存失败；已保存的录制可供检查。' }));
     }
   });
-  await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(options.port ?? 0, '127.0.0.1', resolve); });
+  try{await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(options.port ?? 0, '127.0.0.1', resolve); });}catch(error){await lease.close();throw error;}
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Recording service did not bind');
   expectedHost = `127.0.0.1:${address.port}`;
-  return { baseUrl: `http://${expectedHost}`, capability, close: () => new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }) };
+  return { baseUrl: `http://${expectedHost}`, capability, close: async () => {await new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); });await lease.close();} };
 }
 
 export { startInteractiveRecording } from './interactive.js';
+
+export {recoverRecordings} from './recovery.js';

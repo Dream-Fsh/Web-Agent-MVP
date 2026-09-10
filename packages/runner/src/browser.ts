@@ -1,3 +1,4 @@
+import {acquirePersistenceLease} from '@web-agent/workflow-builder/persistence';
 import { chromium } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -6,6 +7,8 @@ export interface AutomationBrowserOptions { root: string; headless?: boolean; ex
 
 /** Uses only the app-owned automation profile, never a user's daily Chrome profile. */
 export async function openAutomationBrowser(options: AutomationBrowserOptions) {
+  const lease=await acquirePersistenceLease(resolve(options.root,'data/browser-profile.lock'));
+  try {
   const profile = resolve(options.root, 'data/browser-profile');
   await mkdir(join(profile,'Default'),{recursive:true});
   const preferencesPath = join(profile,'Default/Preferences');
@@ -35,6 +38,12 @@ export async function openAutomationBrowser(options: AutomationBrowserOptions) {
       }catch{await route.abort('failed').catch(()=>{});}
     });
   }
+  let releasePromise:Promise<void>|undefined;
+  const release=()=>releasePromise??=lease.close();
+  context.once('close',()=>{void release().catch(()=>{});});
+  const close=context.close.bind(context);
+  context.close=async options=>{try{await close(options);}finally{await release();}};
   context.setDefaultTimeout(5000);
   return {context,profile};
+  }catch(error){await lease.close();throw error;}
 }
