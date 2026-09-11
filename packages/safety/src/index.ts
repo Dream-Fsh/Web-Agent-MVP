@@ -6,7 +6,7 @@ export interface SafetyPolicy { mode?: "read-only" | "allow-writes"; allowedOrig
 export const REDACTED = "[REDACTED]";
 
 const sensitiveKey = /password|authorization|cookie|token|access_token|refresh_token|prompt|filename/i;
-const urlKey = /url$/i;
+const urlKey = /(?:url$|^(?:href|src|action|formaction|poster|cite|background|xlink:href)$)/i;
 const destructive = /删除|支付|永久关闭|delete|pay|permanently close/i;
 const write = /保存|编辑|创建|修改预算|提交|启用|暂停广告|save|edit|create|submit|enable|pause/i;
 
@@ -14,6 +14,7 @@ function redactValue(value: unknown, key = ""): unknown {
   if (sensitiveKey.test(key)) return REDACTED;
   if (urlKey.test(key) && typeof value === "string") return redactUrl(value);
   if (typeof value === "string" && /(?:password|authorization|cookie|token|access_token|refresh_token)\s*[=:]/i.test(value)) return REDACTED;
+  if (typeof value === 'string') return value.replace(/https?:\/\/[^\s"'<>]+/gi, url => redactUrl(url));
   if (Array.isArray(value)) return value.map((item) => redactValue(item));
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([childKey, childValue]) => [childKey, redactValue(childValue, childKey)]));
   return value;
@@ -25,14 +26,26 @@ export function redactSensitiveData<T>(value: T): T { return redactValue(value) 
 /** Removes a URL query before URLs cross a persistence or diagnostic boundary. */
 export function redactUrl(value: string): string {
   try {
-    const url = new URL(value);
-    url.search = "";
-    return url.toString().replace(/\?$/, "");
-  } catch {
-    return REDACTED;
-  }
+    // Resolve relative attributes only for parsing, then preserve their relative form.
+    const base = 'https://redaction.invalid/';
+    const absolute = /^[a-z][a-z0-9+.-]*:/i.test(value);
+    const url = new URL(value, base);
+    if (!['http:', 'https:'].includes(url.protocol)) return REDACTED;
+    url.username = ''; url.password = ''; url.search = '';
+    if (!/^#[A-Za-z0-9/_-]+$/.test(url.hash)) url.hash = '';
+    if (absolute) return url.href;
+    if (value.startsWith('//')) return '//' + url.host + url.pathname + url.hash;
+    // Relative path segments carry no credentials; discard query/fragment in the original spelling.
+    return value.split(/[?#]/, 1)[0] + url.hash;
+  } catch { return REDACTED; }
 }
 
+export function assertOriginAllowed(value:string,startUrl:string,policy:SafetyPolicy):void {
+  let destination:URL,start:URL;
+  try {destination=new URL(value);start=new URL(startUrl);} catch {throw new UnsafeActionBlockedError('unknown','navigation URL is invalid');}
+  if(!['http:','https:'].includes(destination.protocol)||destination.username||destination.password)throw new UnsafeActionBlockedError('unknown','navigation URL is unsafe');
+  if(destination.origin!==start.origin&&!isAllowedOrigin(destination,policy.allowedOrigins??[]))throw new UnsafeActionBlockedError('unknown','cross-origin navigation is not allowlisted');
+}
 export function redactRawEvent(event: RawEvent): RawEvent {
   const element = event.element ? redactValue(event.element) as RawEvent['element'] : undefined;
   const inputType = element?.attributes.type?.toLowerCase();

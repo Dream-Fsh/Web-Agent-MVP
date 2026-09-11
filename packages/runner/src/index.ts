@@ -1,3 +1,4 @@
+import {guardOrigins} from './origin.js';
 import type { Page } from "@playwright/test";
 import { parseWorkflow, type Workflow, type WorkflowStep } from "@web-agent/protocol";
 import { assertStepAllowed, type SafetyPolicy } from "@web-agent/safety";
@@ -36,9 +37,20 @@ export async function runWorkflow(page: Page, input: Workflow, options: RunOptio
   const context: RunContext = { currentPage:page, browserContext:page.context(), variables:options.variables ?? {}, outputs:{}, downloads:[], policy:options.policy ?? { mode:"read-only" }, runId:options.runId ?? crypto.randomUUID() };
   const startedAt = new Date().toISOString();
   const steps: RunStepResult[] = [];
-  await context.currentPage.goto(workflow.startUrl, { waitUntil:"domcontentloaded" });
+  let guard:Awaited<ReturnType<typeof guardOrigins>>|undefined;
+  try {
+    try {
+      guard=await guardOrigins(context.browserContext,workflow.startUrl,context.policy);
+      guard.assertReady();
+      await context.currentPage.goto(workflow.startUrl, { waitUntil:"domcontentloaded" });
+      await guard.check(context.currentPage);
+    } catch(error) {
+      try {guard?.assertReady();}catch(blocked){error=blocked;}
+      return {runId:context.runId,workflowId:workflow.id,status:error instanceof Error&&error.name==='UnsafeActionBlockedError'?'blocked':'failed',steps:[{id:'navigation',type:'navigate',status:error instanceof Error&&error.name==='UnsafeActionBlockedError'?'blocked':'failed',message:error instanceof Error?error.message:String(error)}],outputs:{},downloads:[],startedAt,finishedAt:new Date().toISOString()};
+    }
   for (const step of workflow.steps) {
     try {
+      await guard.check(context.currentPage);
       const resolvedStep = { ...step, parameters:step.parameters ? resolveWorkflowValue(step.parameters, context.variables) : undefined };
       assertStepAllowed(resolvedStep, context.policy, workflow.startUrl);
       switch (resolvedStep.type) {
@@ -60,11 +72,14 @@ export async function runWorkflow(page: Page, input: Workflow, options: RunOptio
         }
         default: throw new Error(`Runner does not execute ${step.type} steps`);
       }
+      await guard.check(context.currentPage);
       steps.push({ id:step.id, type:step.type, status:"completed" });
     } catch (error) {
+      try {guard.assertReady();}catch(violation){error=violation;}
       const blocked = error instanceof Error && error.name === "UnsafeActionBlockedError";
       return { runId:context.runId, workflowId:workflow.id, status:blocked ? "blocked" : "failed", steps:[...steps, { id:step.id, type:step.type, status:blocked ? "blocked" : "failed", message:error instanceof Error ? error.message : String(error) }], outputs:context.outputs, downloads:context.downloads, startedAt, finishedAt:new Date().toISOString() };
     }
   }
   return { runId:context.runId, workflowId:workflow.id, status:"success", steps, outputs:context.outputs, downloads:context.downloads, startedAt, finishedAt:new Date().toISOString() };
+  } finally {await guard?.close();}
 }
