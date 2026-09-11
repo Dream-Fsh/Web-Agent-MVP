@@ -27,6 +27,7 @@ export function redactSensitiveData<T>(value: T): T { return redactValue(value) 
 export function redactUrl(value: string): string {
   try {
     // Resolve relative attributes only for parsing, then preserve their relative form.
+    value = value.trim().replace(/[\t\r\n]/g, '').replace(/\\/g, '/');
     const base = 'https://redaction.invalid/';
     const absolute = /^[a-z][a-z0-9+.-]*:/i.test(value);
     const url = new URL(value, base);
