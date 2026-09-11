@@ -35,5 +35,7 @@
 
 ## 10E / 10F — Documentation and CI
 
-- [ ] Update README Quick Start and actual CLI capabilities/boundaries.
+- [x] Update README Quick Start and actual CLI capabilities/boundaries.
 - [ ] Keep all CI checks and Extension E2E; verify hosted latest-head CI, capture CLI output/evidence, report commits and remaining limitations.
+
+10E (2026-09-11): README examples/link check RED then GREEN. npm run verify PASS: typecheck, 100 package tests, 4 script checks, 10 E2E. Remote final-head acceptance pending on Draft PR #3; independent review pending.
