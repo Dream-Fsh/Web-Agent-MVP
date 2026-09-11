@@ -132,6 +132,9 @@ npm exec -- web-agent recording recover
 
 ## 验收证据
 
+- [本轮 3 个 P1 阻塞项修复与回归证据](docs/p1-task10-fixes.md)：最终 SHA 待独立复审；两个 PR 均未合并。
+
+
 - [10A CLI 接线与真实 Codex 本地验收](docs/task10a-acceptance.md)
 - [10B 心跳与异常恢复](docs/task10b-recovery.md)
 - [10C 同源 iframe / 新标签 UI E2E](docs/task10c-contexts.md)

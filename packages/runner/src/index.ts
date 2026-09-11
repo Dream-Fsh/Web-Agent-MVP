@@ -35,7 +35,9 @@ async function executeExtract(context: RunContext, step: WorkflowStep): Promise<
 /** Runs a validated Workflow directly through Safety, Locator Engine, and Playwright. */
 export async function runWorkflow(page: Page, input: Workflow, options: RunOptions = {}): Promise<RunResult> {
   const workflow = parseWorkflow(input);
-  const context: RunContext = { currentPage:page, recordingStartPage:page, existingPages:page.context().pages(), browserContext:page.context(), variables:options.variables ?? {}, outputs:{}, downloads:[], policy:options.policy ?? { mode:"read-only" }, runId:options.runId ?? crypto.randomUUID() };
+  const context: RunContext = { currentPage:page, recordingStartPage:page, recordingPages:[page], browserPages:page.context().pages(), recordingOwners:new Map(), existingPages:page.context().pages(), browserContext:page.context(), variables:options.variables ?? {}, outputs:{}, downloads:[], policy:options.policy ?? { mode:"read-only" }, runId:options.runId ?? crypto.randomUUID() };
+  const trackPage=(newPage:Page)=>{context.recordingPages!.push(newPage);context.browserPages!.push(newPage);context.recordingOwners!.set(newPage,newPage.opener());};
+  context.browserContext.on('page',trackPage);
   const startedAt = new Date().toISOString();
   const steps: RunStepResult[] = [];
   let guard:Awaited<ReturnType<typeof guardOrigins>>|undefined;
@@ -82,5 +84,5 @@ export async function runWorkflow(page: Page, input: Workflow, options: RunOptio
     }
   }
   return { runId:context.runId, workflowId:workflow.id, status:"success", steps, outputs:context.outputs, downloads:context.downloads, startedAt, finishedAt:new Date().toISOString() };
-  } finally {await guard?.close();}
+  } finally {context.browserContext.off('page',trackPage);await guard?.close();}
 }

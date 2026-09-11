@@ -52,7 +52,7 @@ export async function executeStoredRun(workflow:Workflow,options:StoredRunOption
   options.signal?.throwIfAborted();
   const root = resolve(options.root);
   const variables = resolveBindings(workflow,options.variables);
-  const {context} = await openAutomationBrowser({root,headless:options.headless,localOnly:options.localOnly});
+  const {context} = await openAutomationBrowser({root,headless:options.headless,localOnly:options.localOnly,blockServiceWorkers:true});
   const abort=()=>{void context.close();};
   options.signal?.addEventListener('abort',abort,{once:true});
   const page = context.pages()[0] ?? await context.newPage();

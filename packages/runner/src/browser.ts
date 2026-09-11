@@ -3,7 +3,7 @@ import { chromium } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
-export interface AutomationBrowserOptions { root: string; headless?: boolean; extensionPath?: string; cdpPort?: number; localOnly?:boolean }
+export interface AutomationBrowserOptions { root: string; headless?: boolean; extensionPath?: string; cdpPort?: number; localOnly?:boolean; blockServiceWorkers?:boolean }
 
 /** Uses only the app-owned automation profile, never a user's daily Chrome profile. */
 export async function openAutomationBrowser(options: AutomationBrowserOptions) {
@@ -24,7 +24,7 @@ export async function openAutomationBrowser(options: AutomationBrowserOptions) {
     if (!Number.isInteger(options.cdpPort) || options.cdpPort < 1 || options.cdpPort > 65535) throw new Error('Invalid CDP port');
     args.push('--remote-debugging-address=127.0.0.1',`--remote-debugging-port=${options.cdpPort}`);
   }
-  const context = await chromium.launchPersistentContext(profile,{channel:'chromium',headless:options.headless ?? false,args,serviceWorkers:options.localOnly?'block':'allow'});
+  const context = await chromium.launchPersistentContext(profile,{channel:'chromium',headless:options.headless ?? false,args,serviceWorkers:options.localOnly||options.blockServiceWorkers?'block':'allow'});
   if(options.localOnly) {
     const allowed=(url:string)=>{const parsed=new URL(url);return ['http:','https:'].includes(parsed.protocol)&&['127.0.0.1','localhost','[::1]'].includes(parsed.hostname);};
     await context.route('**/*',async route=>{
