@@ -41,3 +41,13 @@ it('independently sanitizes legacy Workflow input at the actual save boundary',a
  }
  await assertClean(root);
 });
+it('keeps sensitive variable definitions usable when persisting a normal workflow',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'wa-c0-variables-'));console.info('C0 variable artifacts:',root);
+ const workflow=buildWorkflow([],[],{id:'bindings',name:'query',sessionId:'s',startUrl:'http://127.0.0.1:9/rta',createdAt:new Date().toISOString()});
+ workflow.variables={password:{required:true,sensitive:true,defaultValue:secret},accountId:{required:true,defaultValue:'10001'}};
+ const saved=await saveWorkflow(workflow,root);
+ const result=parseWorkflow(JSON.parse(await readFile(saved.path,'utf8')));
+ expect(result.variables.password).toEqual({required:true,sensitive:true});
+ expect(result.variables.accountId.defaultValue).toBe('10001');
+ await assertClean(root);
+});
