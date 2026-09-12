@@ -52,3 +52,25 @@ Upstream final head: `bd3a35e36056c72707b4d518bf69d81f3d764651` (includes `58955
 Task 10 full local `npm run verify` passes 116 package tests, 4 script checks and all 10 E2E, including unchanged real Extension UI iframe/new-tab and production CLI record/run/repair/rollback flows. Typecheck and the Runner suite were repeated after the legacy-scope tombstone addition. Scanning the 44 retained generated JSON/NDJSON/text/HTML E2E artifacts found no synthetic plaintext or encoded secret markers; actual persistence regression tests also scan their transient outputs before cleanup. This scan excludes browser profiles, fixture source, and supplementary RED failure logs.
 
 Additional RED evidence: `p1-frame-red.log`, `p1-popup-red.log`, `p1-url-normalized-red.log` (3 failures), `p1-legacy-tab-red.log`. Corrections preserve existing test assertions and do not skip visible UI E2E. The first-popup redirect fail-closed boundary above remains explicit. Final Task 10 hosted CI and independent re-review remain pending at document commit time.
+
+## C0 P1-3 follow-up (2026-09-13)
+
+Shared Safety/Workflow-writer changes are delivered on Task 09 first and merged normally into Task 10. This round does not change origin interception, tab identity, repair loopback rules or business features.
+
+`apps/cli/src/c0-failure.test.ts` supplies deliberately secret-bearing *legacy input files* to the real CLI, independently of the new recording and writer boundaries. U+0000/U+0001 start URLs and all 32 C0-prefixed URL-attribute forms reach the production Runner/Failure Package path. Assertions require exit 2, blocked status, no extraction, an existing `workflow.snapshot.json`, clean snapshot URLs, and reading/scanning the generated failure and run files plus CLI output. Deliberate legacy input files remain retained and are explicitly excluded from claims about clean output. Tests retain temporary output locations in their logs; no real model is called.
+
+RED evidence: `C:/Users/zlsj/AppData/Local/Temp/web-agent-c0-fix-evidence/task10-red-valid.log`: both real CLI cases fail on f33fdc2 at the credential-bearing snapshot assertion after returning blocked. `task10-red.log` was an earlier fixture compile error (unsupported metadata property) and is not vulnerability evidence. Final GREEN/full verification and hosted CI must cover the new final head, not the previous successful runs.
+
+### Separate compatibility and environment status
+
+Initial popup redirects: **已确认兼容性收缩，V1 接受决定待用户确认**. No acceptance on the user's behalf and no expansion of implementation scope.
+
+Windows profile cleanup EBUSY remains unresolved. Prior independent re-review on Windows / Node 24 / Playwright 1.62.1 used the isolated long-path directory `C:/Users/zlsj/AppData/Local/Temp/web-agent-rereview-5f6e77e5-9237-49bb-890c-777053f19385/fixed`:
+
+- `npx playwright test tests/multi-context.e2e.spec.ts tests/record-to-workflow.e2e.spec.ts tests/cli-production.e2e.spec.ts`: 4 passed, production CLI UI test failed in profile cleanup, `EBUSY ... unlink .../data/browser-profile/first_party_sets.db`.
+- `npx playwright test tests/cli-production.e2e.spec.ts --grep 'records through visible' --output ../cli-retry`: cleanup again failed on `first_party_sets.db-journal`.
+- The subsequent short-output-path diagnostic passed; that is not an EBUSY fix. Cleanup failures can obscure an earlier failure and do not establish a business-assertion failure by themselves.
+
+Unmodified failure logs remain in the re-review directory: `visible-ui-e2e.log`, `cli-retry.log`, `cli-diagnostic.log`. This follow-up neither ignores cleanup errors nor deletes a user profile; new failures, if any, are recorded separately. Real-site pilot remains unstarted. Final SHA needs targeted independent re-review; self-tests/CI do not authorize either PR merge.
+Final upstream follow-up is c1e6bb3cc538dc1e5458198fa82cd1b24ca0d2ed (includes e1ef053). Both were merged normally, retaining Task 10 lease, expected-version and abort checks. The first merged version passed 154 package tests, 4 script checks and all 10 real UI E2E without EBUSY (task10-final-verify.log); the final upstream follow-up requires the new final2 verification and hosted CI.
+Final local verification: task10-final2-verify.log PASS (exit 0): typecheck, 156 package tests, 4 script checks, build and all 10 unchanged real UI E2E. P1-1/P1-2 regressions are included. The two real CLI C0 outputs were additionally scanned (14 files, zero marker remnants); both workflow snapshots pass parseWorkflow. No EBUSY occurred in these runs; the historical cleanup issue remains unresolved. Diff check PASS. Final-head hosted CI is pending at commit time; targeted independent re-review remains pending.
