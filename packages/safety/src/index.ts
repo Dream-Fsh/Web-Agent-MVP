@@ -36,7 +36,7 @@ export function redactUrl(value: string): string {
     const absolute = /^[a-z][a-z0-9+.-]*:/i.test(value);
     // An embedded absolute URL is not a supported relative path (e.g. pasted Markdown).
     if (!absolute && /[a-z][a-z0-9+.-]*:\/\//i.test(value.split(/[?#]/, 1)[0])) return REDACTED;
-    const url = new URL(value, base);
+    const url = absolute ? new URL(value) : new URL(value, base);
     if (!['http:', 'https:'].includes(url.protocol)) return REDACTED;
     url.username = ''; url.password = ''; url.search = '';
     if (!/^#[A-Za-z0-9/_-]+$/.test(url.hash)) url.hash = '';
@@ -74,6 +74,13 @@ export function redactRawEvent(event: RawEvent): RawEvent {
 export function redactWorkflow(workflow: Workflow): Workflow {
   return {
     ...redactSensitiveData(workflow),
+    // Variable names are schema keys, not secret payloads. Preserve their flags;
+    // only non-sensitive defaults may cross this persistence boundary.
+    variables:Object.fromEntries(Object.entries(workflow.variables).map(([name, definition]) => {
+      const {defaultValue, ...flags} = definition;
+      return [name, {...flags, ...(defaultValue !== undefined && !definition.sensitive && !sensitiveKey.test(name)
+        ? {defaultValue:redactSensitiveData(defaultValue)} : {})}];
+    })),
     startUrl:redactUrl(workflow.startUrl),
     steps:workflow.steps.map((step) => ({ ...redactSensitiveData(step), url:step.url ? redactUrl(step.url) : undefined })),
   };

@@ -42,3 +42,9 @@ it('redacts the verbatim pasted control-character forms, including a Markdown-wr
  }
  expect(redactUrl('/report?next=https://fixture.test/rta')).toBe('/report');
 });
+it('never resolves scheme-qualified input against the virtual relative-path base',()=>{
+ for(const value of ['https:report','https:/report']) {
+  expect(redactUrl(value)).toBe(new URL(value).href);
+  expect(redactUrl(value)).not.toContain('redaction.invalid');
+ }
+});
