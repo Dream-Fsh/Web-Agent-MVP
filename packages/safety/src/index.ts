@@ -27,16 +27,25 @@ export function redactSensitiveData<T>(value: T): T { return redactValue(value) 
 export function redactUrl(value: string): string {
   try {
     // Resolve relative attributes only for parsing, then preserve their relative form.
-    value = value.trim().replace(/[\t\r\n]/g, '').replace(/\\/g, '/');
+    // WHATWG strips leading/trailing C0 or space and removes TAB/LF/CR.
+    // Classify exactly the same normalized string that we parse and reconstruct.
+    value = value.trim().replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, '')
+      .replace(/[\t\r\n]/g, '').replace(/\\/g, '/');
+    if (/[\u0000-\u001f]/.test(value)) return REDACTED;
     const base = 'https://redaction.invalid/';
     const absolute = /^[a-z][a-z0-9+.-]*:/i.test(value);
+    // An embedded absolute URL is not a supported relative path (e.g. pasted Markdown).
+    if (!absolute && /[a-z][a-z0-9+.-]*:\/\//i.test(value.split(/[?#]/, 1)[0])) return REDACTED;
     const url = new URL(value, base);
     if (!['http:', 'https:'].includes(url.protocol)) return REDACTED;
     url.username = ''; url.password = ''; url.search = '';
     if (!/^#[A-Za-z0-9/_-]+$/.test(url.hash)) url.hash = '';
     if (absolute) return url.href;
     if (value.startsWith('//')) return '//' + url.host + url.pathname + url.hash;
-    // Relative path segments carry no credentials; discard query/fragment in the original spelling.
+    // Only a genuinely relative URL may retain its normalized path spelling.
+    // Never reconstruct an authority from untrusted original text.
+    if (url.origin !== new URL(base).origin) return REDACTED;
+    // Preserve ./ and ../ semantics without emitting the parsing-only base.
     return value.split(/[?#]/, 1)[0] + url.hash;
   } catch { return REDACTED; }
 }

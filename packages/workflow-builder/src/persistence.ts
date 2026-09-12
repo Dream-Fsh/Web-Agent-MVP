@@ -2,6 +2,7 @@ import {acquirePersistenceLease} from './lease.js';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { parseWorkflow } from '@web-agent/protocol';
+import { redactWorkflow } from '@web-agent/safety';
 
 async function writeSynced(path: string, content: unknown): Promise<void> {
   const file = await fs.open(path, 'wx');
@@ -12,7 +13,7 @@ async function writeSynced(path: string, content: unknown): Promise<void> {
 /** Publishes an immutable version before atomically replacing its current pointer. */
 export async function saveWorkflow(input: unknown, root: string, options: { version?: number; expectedCurrentVersion?: number; signal?:AbortSignal } = {}): Promise<{ path: string; version: number }> {
   options.signal?.throwIfAborted();
-  const workflow = parseWorkflow(input);
+  const workflow = parseWorkflow(redactWorkflow(parseWorkflow(input)));
   if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(workflow.id)) throw new Error('Unsafe workflow id');
   const directory = join(root, workflow.id);
   await fs.mkdir(directory, { recursive: true });
