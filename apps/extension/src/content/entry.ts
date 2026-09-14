@@ -1,4 +1,5 @@
 import { startDomRecorder, snapshot } from './recorder.js';
+import { readInitialState } from './initialState.js';
 import type { RecorderState, RecorderMark } from '@web-agent/recorder-core';
 import { redactRawEvent } from '@web-agent/safety';
 import type { Target } from '@web-agent/protocol';
@@ -13,7 +14,7 @@ declare const chrome: any;
     <section aria-label="Web Agent Recorder"><h2>Web Agent Recorder</h2>
     <p>开始后正常操作网页，停止时保存操作记录。</p><p data-testid="connection">保存服务：未连接</p><p data-testid="saved"></p>
     <p data-testid="recording">Recording: OFF</p><p data-testid="events">Events: 0</p>
-    <button id="start">开始录制</button><button id="stop">停止录制</button>
+    <button id="start" disabled>开始录制</button><button id="stop" disabled>停止录制</button>
     <p role="status" id="error"></p>
     <details><summary>高级选项（可选）</summary>
     <label><input id="generate-workflow" type="checkbox">同时尝试生成重放工作流</label>
@@ -37,7 +38,7 @@ declare const chrome: any;
       return {frameId:0,framePath};
     };
     let state: RecorderState & { connected?: boolean; savedPath?: string; saveError?: string; workflowWarning?: string };
-    let busy = false;
+    let busy = true;
     let stop: (() => void) | undefined;
     let mode: RecorderMark['type'] | undefined;
     const get = (id: string) => root.getElementById(id)!;
@@ -110,10 +111,11 @@ declare const chrome: any;
       if(message.clearMode)mode=undefined;
       if(message.state){const changed=!state||state.sessionId!==message.state.sessionId||state.recording!==message.state.recording;state=message.state;draw();if(changed)capture();}
     });
-    state = await send({ kind: 'status' });
+    try { state = await readInitialState(() => send({ kind: 'status' })); }
+    catch { showError(new Error('录制面板初始化失败，请刷新网页后重试。')); return; }
     // The extension's session survives a normal document navigation or reload.
     if (state.recording) await send({ kind: 'raw-event', event: redactRawEvent({ schemaVersion: '1.0', id: crypto.randomUUID(), sessionId: state.sessionId, timestamp: Date.now(), type: 'navigation', url: location.href, frame: frameContext(), metadata: { navigationKind: 'document' } }) });
-    capture();
+    capture(); busy = false; draw();
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { void initialize(); }, { once: true });
   else void initialize();
