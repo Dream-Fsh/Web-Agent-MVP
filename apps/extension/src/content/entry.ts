@@ -11,16 +11,20 @@ declare const chrome: any;
     const root = host.attachShadow({ mode: 'open' });
     root.innerHTML = `<style>:host{font:13px system-ui;color:#182238}section{width:250px;max-height:calc(100vh - 64px);overflow:auto;padding:16px;border:1px solid #d0d7e2;border-radius:12px;background:#fff;box-shadow:0 8px 30px #0003}h2{font-size:16px;margin:0 0 10px}button{padding:7px;margin:3px;border:1px solid #94a3b8;border-radius:5px;cursor:pointer;background:#eef2ff}input,select{box-sizing:border-box;width:100%;margin:4px 0 8px}label{display:block}p{overflow-wrap:anywhere;margin:5px 0}</style>
     <section aria-label="Web Agent Recorder"><h2>Web Agent Recorder</h2>
-    <p>请在扩展弹窗中连接保存服务</p><p data-testid="connection">保存服务：未连接</p><p data-testid="saved"></p>
-    <p data-testid="recording">Recording: OFF</p><p data-testid="events">Events: 0</p><p data-testid="annotations">Annotations: 0</p>
+    <p>开始后正常操作网页，停止时保存操作记录。</p><p data-testid="connection">保存服务：未连接</p><p data-testid="saved"></p>
+    <p data-testid="recording">Recording: OFF</p><p data-testid="events">Events: 0</p>
     <button id="start">开始录制</button><button id="stop">停止录制</button>
+    <p role="status" id="error"></p>
+    <details><summary>高级选项（可选）</summary>
+    <label><input id="generate-workflow" type="checkbox">同时尝试生成重放工作流</label>
+    <p>下面的标注不是保存操作记录的必要条件。</p><p data-testid="annotations">Annotations: 0</p>
     <label>变量名<input id="variable" value="accountId"></label><label>敏感变量<input id="sensitive" type="checkbox"></label>
     <label>输出键<input id="key" value="results"></label>
     <label>提取类型<select id="extraction" aria-label="提取类型"><option value="extractTable">表格</option><option value="extractText">文本</option><option value="extractCount">数量</option></select></label>
     <label>断言类型<select id="assertion" aria-label="断言类型"><option value="assertVisible">目标可见</option><option value="assertText">包含文本</option></select></label>
     <label>预期值<input id="expected"></label>
     <button id="variable-mark">标记变量</button><button id="extraction-mark">标记提取</button><button id="assertion-mark">标记断言</button>
-    <p id="target">当前目标：未选择</p><p id="mode">当前模式：普通录制</p><p id="session">当前 Session：无</p><p role="status" id="error"></p></section>`;
+    <p id="target">当前目标：未选择</p><p id="mode">当前模式：普通录制</p><p id="session">当前 Session：无</p></details></section>`;
     if(window===window.top)document.documentElement.append(host);
     const frameContext=()=>{
       const framePath:string[]=[];let current:Window=window;
@@ -32,7 +36,8 @@ declare const chrome: any;
       }
       return {frameId:0,framePath};
     };
-    let state: RecorderState & { connected?: boolean; savedPath?: string; saveError?: string };
+    let state: RecorderState & { connected?: boolean; savedPath?: string; saveError?: string; workflowWarning?: string };
+    let busy = false;
     let stop: (() => void) | undefined;
     let mode: RecorderMark['type'] | undefined;
     const get = (id: string) => root.getElementById(id)!;
@@ -44,6 +49,9 @@ declare const chrome: any;
       get('session').textContent = `当前 Session：${state.sessionId || '无'}`;
       root.querySelector('[data-testid="connection"]')!.textContent = `保存服务：${state.connected ? '已连接' : '未连接'}`;
       root.querySelector('[data-testid="saved"]')!.textContent = state.savedPath ? `已保存：${state.savedPath}` : state.saveError ?? '';
+      if (state.workflowWarning) root.querySelector('[data-testid="saved"]')!.textContent += `\n${state.workflowWarning}`;
+      (get('start') as HTMLButtonElement).disabled = busy || state.recording;
+      (get('stop') as HTMLButtonElement).disabled = busy || (!state.recording && (!state.events.length || Boolean(state.savedPath)));
     };
     const send = async (command: Record<string, unknown>) => {
       const response = await chrome.runtime.sendMessage({ scope: 'recorder-ui', ...command });
@@ -59,9 +67,13 @@ declare const chrome: any;
     };
     const showError = (error: unknown) => { get('error').textContent = error instanceof Error ? error.message : '录制失败'; };
     for (const kind of ['start', 'stop']) get(kind).onclick = event => {
-      if (!event.isTrusted) return;
+      if (!event.isTrusted || busy) return;
+      get('error').textContent = kind === 'stop' ? '正在保存…' : '';
+      busy = true; draw();
       stop?.(); stop = undefined; mode = undefined;
-      void send({ kind }).then(capture).catch(showError);
+      void send({ kind, generateWorkflow: (get('generate-workflow') as HTMLInputElement).checked })
+        .then(() => { get('error').textContent = ''; capture(); }).catch(showError)
+        .finally(() => { busy = false; draw(); });
     };
     for (const [id, type] of [['variable-mark', 'variable'], ['extraction-mark', 'extraction'], ['assertion-mark', 'requiredAssertion']] as const) {
       get(id).onclick = event => {
@@ -75,7 +87,8 @@ declare const chrome: any;
     document.addEventListener('click', event => {
       if (!event.isTrusted || !mode || event.composedPath().includes(host) || !(event.target instanceof Element)) return;
       event.preventDefault(); event.stopImmediatePropagation();
-      const selected = mode === 'extraction' && value('extraction') === 'extractTable' ? event.target.closest('table') ?? event.target : event.target;
+      const selected = mode === 'extraction' && value('extraction') === 'extractTable' ? event.target.closest('table') : event.target;
+      if (!selected) { showError(new Error('表格提取请点击结果表格内的任意位置。')); return; }
       const element = snapshot(selected);
       const safe = redactRawEvent({ schemaVersion: '1.0', id: crypto.randomUUID(), sessionId: state.sessionId, timestamp: Date.now(), type: 'input', url: location.href, frame: frameContext(), element,
         value: event.target instanceof HTMLInputElement ? event.target.value : undefined });
@@ -97,7 +110,10 @@ declare const chrome: any;
       if(message.clearMode)mode=undefined;
       if(message.state){const changed=!state||state.sessionId!==message.state.sessionId||state.recording!==message.state.recording;state=message.state;draw();if(changed)capture();}
     });
-    await send({ kind: 'status' }); capture();
+    state = await send({ kind: 'status' });
+    // The extension's session survives a normal document navigation or reload.
+    if (state.recording) await send({ kind: 'raw-event', event: redactRawEvent({ schemaVersion: '1.0', id: crypto.randomUUID(), sessionId: state.sessionId, timestamp: Date.now(), type: 'navigation', url: location.href, frame: frameContext(), metadata: { navigationKind: 'document' } }) });
+    capture();
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { void initialize(); }, { once: true });
   else void initialize();

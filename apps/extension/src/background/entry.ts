@@ -35,7 +35,7 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, reply: (value: 
       if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || url.username || url.password || url.search || url.hash) throw new Error('Only local recording services are supported');
       const candidate = { endpoint: url.origin, capability: String(message.capability) };
       const health = await fetch(`${candidate.endpoint}/health`, { headers: { Authorization: `Bearer ${candidate.capability}` }, signal: AbortSignal.timeout(5000) });
-      if (!health.ok) throw new Error('Pairing failed');
+      if (!health.ok) throw new Error(`Pairing failed (HTTP ${health.status})`);
       connection = candidate;
       await chrome.storage.session.set({ [connectionKey]: connection });
     }
@@ -57,15 +57,20 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, reply: (value: 
     if (message.kind === 'start' && connection) {
       await fetch(`${connection.endpoint}/sessions/start`, {method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${connection.capability}`},body:JSON.stringify({sessionId:next.sessionId}),signal:AbortSignal.timeout(5000)}).catch(()=>undefined);
     }
-    if (message.kind === 'stop') {
+    if (message.kind === 'stop' && !next.savedPath) {
       await chrome.storage.local.set({ [key]: next });
       if (connection) {
-        Object.assign(next, await sendRecording(connection.endpoint, connection.capability, { sessionId: next.sessionId, events: next.events, annotations: next.annotations }));
-      } else next.saveError = '尚未连接保存服务，Workflow 未生成。';
+        next.saveError = undefined;
+        Object.assign(next, await sendRecording(connection.endpoint, connection.capability, { sessionId: next.sessionId, events: next.events, annotations: next.annotations, generateWorkflow: message.generateWorkflow === true }));
+      } else next.saveError = '尚未连接保存服务，操作记录暂存在扩展中。连接后可再次点击停止保存。';
       await chrome.storage.session.set({ [key]: next });
     }
     if(message.kind!=='status')await Promise.all(members.map(member=>chrome.tabs.sendMessage(member,{scope:'recorder-state',state:next,markMode:message.kind==='mark-mode'?message.markMode:undefined,fields:message.fields,sensitive:message.sensitive,clearMode:message.kind==='annotation'||message.kind==='stop'}).catch(()=>undefined)));
     reply(next);
-  }).catch(() => { reply({ error: '录制操作失败，请检查当前会话。' }); });
+  }).catch((error) => {
+    // Never forward arbitrary exception messages containing captured page data.
+    const http = error instanceof Error ? /^Pairing failed \(HTTP (\d{3})\)$/.exec(error.message) : null;
+    reply({ error: http ? `配对失败（HTTP ${http[1]}）` : '录制操作失败，请检查当前会话。' });
+  });
   return true;
 });

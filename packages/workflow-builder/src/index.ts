@@ -62,6 +62,7 @@ export function buildWorkflow(actions: NormalizedAction[], inputs: RecordingAnno
     const frame = { ...action.context.frame, ...(action.context.frame.frameUrl ? { frameUrl: redactUrl(action.context.frame.frameUrl) } : {}) };
     const parameters: Record<string, unknown> = { frame };
     switch (action.type) {
+      case 'focus': break; // Focusing is implicit in the following click/input.
       case 'navigate': add({ type: 'navigate', url: redactUrl(action.url), parameters }); break;
       case 'input':
       case 'select': {

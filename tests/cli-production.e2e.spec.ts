@@ -25,6 +25,74 @@ async function closeChrome(browser:Awaited<ReturnType<typeof chromium.connectOve
   const session=await browser.newBrowserCDPSession();await session.send('Browser.close').catch(()=>{});
 }
 
+test('one-click recording auto-pairs, captures ordinary page interactions across navigation and saves without annotations', async ({}, info) => {
+  const root = info.outputPath('simple-data'); await mkdir(root, { recursive: true });
+  const site = createServer((request, response) => response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(request.url === '/next'
+    ? '<h1>Next page</h1><input aria-label="Next input">'
+    : '<h1>Plain recording</h1><label>Account <input name="accountId" value=""></label><input aria-label="Secret" type="password"><select aria-label="Choice"><option>A</option><option>B</option></select><label><input type="checkbox">Enabled</label><div contenteditable="true" aria-label="Notes"></div><table><tr><td>Ordinary cell</td></tr></table><div id="scroller" style="height:100px;overflow:auto"><div style="height:1500px">Scroll here</div></div><a href="/next">Next page</a>'));
+  await new Promise<void>(resolve => site.listen(0, '127.0.0.1', resolve));
+  const address = site.address(); if (!address || typeof address === 'string') throw new Error('No port');
+  const url = `http://127.0.0.1:${address.port}/`;
+  const debugPort = await port();
+  const recorder = launch(root, ['record', '--headless', '--cdp-port', String(debugPort), '--url', url]);
+  let browser: Awaited<ReturnType<typeof chromium.connectOverCDP>> | undefined;
+  try {
+    await expect.poll(() => recorder.output(), { timeout: 30000 }).toContain('Recorder ready');
+    expect(recorder.output()).toContain('已自动连接保存服务');
+    browser = await chromium.connectOverCDP(`http://127.0.0.1:${debugPort}`);
+    const page = browser.contexts()[0].pages().find(p => p.url() === url)!;
+    const ui = page.locator('web-agent-recorder');
+    await expect(ui.locator('#variable-mark')).toBeHidden();
+    await expect(ui.getByTestId('connection')).toHaveText('保存服务：已连接');
+    await ui.getByRole('button', { name: '开始录制', exact: true }).click();
+    await expect(ui.getByTestId('recording')).toHaveText('Recording: ON');
+    await page.getByLabel('Account', { exact: true }).click();
+    await expect(ui.getByTestId('events')).toHaveText('Events: 3');
+    await expect(ui.locator('#error')).toBeEmpty();
+    await page.getByLabel('Account', { exact: true }).fill('RTA002');
+    await page.getByLabel('Account', { exact: true }).press('Tab');
+    await page.getByLabel('Secret', { exact: true }).fill('DO_NOT_PERSIST_TEST');
+    await page.getByLabel('Choice').selectOption('B');
+    await page.getByLabel('Enabled').check();
+    await page.getByLabel('Notes').fill('Recorded notes');
+    await page.getByText('Ordinary cell', { exact: true }).click();
+    await page.locator('#scroller').hover(); await page.mouse.wheel(0, 300);
+    await expect.poll(() => page.locator('#scroller').evaluate(el => el.scrollTop)).toBeGreaterThan(0);
+    await page.getByRole('link', { name: 'Next page' }).click();
+    await expect(page).toHaveURL(url + 'next');
+    await expect(ui.getByTestId('recording')).toHaveText('Recording: ON');
+    await page.getByLabel('Next input').fill('continued');
+    await ui.getByRole('button', { name: '停止录制', exact: true }).click();
+    await expect(ui.getByTestId('saved')).toContainText('已保存：');
+    await expect.poll(() => recorder.output()).toContain('Recording saved:');
+    await expect(ui.getByRole('button', { name: '停止录制', exact: true })).toBeDisabled();
+    const count = await ui.getByTestId('events').textContent();
+    await page.getByLabel('Next input').fill('AFTER_STOP');
+    await expect(ui.getByTestId('events')).toHaveText(count!);
+    await page.screenshot({ path: info.outputPath('simple-recorder.png') });
+    const [id] = await readdir(join(root, 'data/recordings'));
+    const text = await readFile(join(root, 'data/recordings', id, 'raw-events.ndjson'), 'utf8');
+    const events = text.trim().split('\n').map(line => JSON.parse(line));
+    expect(events.map(e => e.type)).toEqual(expect.arrayContaining(['click', 'input', 'change', 'scroll', 'keydown', 'navigation']));
+    expect(events.some(e => e.element?.tag === 'td' && e.type === 'click')).toBe(true);
+    expect(events.some(e => e.element?.tag === 'select' && e.value === 'B')).toBe(true);
+    expect(events.some(e => e.metadata?.checked === true)).toBe(true);
+    expect(events.some(e => e.value === 'Recorded notes')).toBe(true);
+    expect(events.some(e => e.type === 'navigation' && e.url === url + 'next')).toBe(true);
+    expect(events.some(e => e.value === 'continued')).toBe(true);
+    expect(text).not.toMatch(/DO_NOT_PERSIST_TEST|AFTER_STOP/);
+    expect(text).toContain('[REDACTED]');
+    expect(JSON.parse(await readFile(join(root, 'data/recordings', id, 'annotations.json'), 'utf8'))).toEqual([]);
+    expect(await readdir(root)).not.toContain('workflows');
+    await closeChrome(browser); expect(await recorder.done).toBe(0);
+  } finally {
+    if (browser?.isConnected()) await closeChrome(browser);
+    if (recorder.child.exitCode === null) recorder.child.kill();
+    await recorder.done;
+    await new Promise<void>(resolve => { site.close(() => resolve()); site.closeAllConnections(); });
+  }
+});
+
 test('CLI login opens and reuses only the automation profile without retaining the password',async()=>{
   const root=await mkdtemp(join(tmpdir(),'cli-login-'));
   const fixture=await startFixtureServer();
@@ -75,6 +143,7 @@ test('CLI records through visible Extension UI, runs generated workflow, reads f
     await popup.getByLabel('配对码',{exact:true}).fill(/Pairing code: ([a-f0-9]+)/.exec(recorder.output())![1]);
     await popup.getByRole('button',{name:'连接保存服务',exact:true}).click();await expect(popup.getByRole('status')).toHaveText('保存服务：已连接');await popup.close();
     const ui=page.locator('web-agent-recorder');
+    await ui.locator('summary').click();await ui.locator('#generate-workflow').check();
     await ui.getByRole('button',{name:'开始录制',exact:true}).click();await expect(ui.getByTestId('recording')).toHaveText('Recording: ON');
     await expect.poll(()=>recorder.output().includes('Recording started')).toBe(true);
     await page.getByLabel('账户ID',{exact:true}).fill('10001');await page.getByRole('button',{name:'查询',exact:true}).click();

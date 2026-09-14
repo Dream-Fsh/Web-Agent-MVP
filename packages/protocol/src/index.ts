@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const RAW_EVENT_TYPES = [
   "click", "dblclick", "input", "change", "submit", "navigation", "tab-change", "upload", "drag-drop",
+  "scroll", "keydown", "focus", "contextmenu",
 ] as const;
 export type RawEventType = (typeof RAW_EVENT_TYPES)[number];
 

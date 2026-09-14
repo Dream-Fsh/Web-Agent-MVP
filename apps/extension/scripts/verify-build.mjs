@@ -1,3 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
+import { createHash } from 'node:crypto';
 for (const path of ["dist/manifest.json", "dist/page-hooks.js", "dist/content/recorder.js", "dist/background/serviceWorker.js"]) if (!existsSync(path)) throw new Error(`Missing extension artifact: ${path}`);
 if (readFileSync("dist/content/recorder.js", "utf8").includes("@web-agent/")) throw new Error("Content bundle contains a workspace bare import");
+const manifest = JSON.parse(readFileSync('dist/manifest.json', 'utf8'));
+const bundle = readFileSync('dist/background/serviceWorker.js');
+const digest = createHash('sha256').update(bundle).digest('hex').slice(0, 16);
+const version = `0.${parseInt(digest.slice(0, 4), 16)}.${parseInt(digest.slice(4, 8), 16)}.${parseInt(digest.slice(8, 12), 16)}`;
+if (manifest.version !== version) throw new Error('Extension version must identify the current background bundle');
+if (manifest.background.service_worker !== `background/serviceWorker.${digest}.js`) throw new Error('Background worker URL must match the current bundle hash');
+if (!readFileSync(`dist/${manifest.background.service_worker}`).equals(bundle)) throw new Error('Versioned worker content does not match the bundle');

@@ -1,14 +1,14 @@
 # Web Agent
 
-本地网页操作录制与重跑。用户通过 Chrome Extension 演示查询并标注变量、提取和必需断言，停止后自动生成版本化 Workflow，由 Generic Runner 执行。
+本地网页操作录制。默认只需点击“开始录制”，正常操作网页，再点击“停止录制”保存脱敏操作记录。变量、提取、断言及重放工作流生成均为高级可选功能。
 
 ## 当前架构
 
 ```text
 Extension popup（仅配对）+ 网页 recorder overlay（操作与标注）
   → Chrome runtime message passing → recorder-core → Safety / Redaction
-  → 本地 recording-service → Recording Adapter → Normalizer
-  → Workflow Builder → parseWorkflow → workflows/<id>/v1.json
+  → 本地 recording-service → Recording Adapter → data/recordings/<id>/
+  → 可选：Normalizer → Workflow Builder → parseWorkflow → workflows/<id>/v1.json
   → Generic Runner → Safety + Locator Engine + Assertions + Extractor
   → RunResult（status、outputs、downloads）
 ```
@@ -26,6 +26,20 @@ Next：经单独授权的 Real-site Read-only Pilot，目前尚未启动。准�
 ## Quick Start
 
 在仓库根目录执行。需要 Node.js 24+；`npm install` 可用于开发，固定依赖安装使用 `npm ci`。
+
+最快开始本地可录制演示：
+
+一键启动会自动归档“所属进程已退出且心跳已超时”的旧锁；正在运行或刚退出的会话不会被抢占，会显示等待提示。已有操作记录保留。
+
+```powershell
+npm ci
+npx playwright install chromium chrome
+npm run start:demo
+```
+
+该命令会构建项目、启动临时 Fixture、打开录制浏览器并自动配对。直接在网页点击“开始录制”，操作结束后点击“停止录制”。面板显示“已保存”及目录，终端打印 `Recording saved:`。默认无须标注，也不会生成或执行重放工作流。关闭浏览器（或按 `Ctrl+C`）会关闭 Fixture。旧版浏览器需关闭后重新启动以加载新版扩展。
+
+记录包括普通点击、双击、输入、下拉选择、复选框/单选框状态、可编辑文本、焦点、右键、控制键、表单提交、滚动终点及页面跳转。滚动按 150ms 合并，文字通过输入事件记录，不保存逐字按键；文件选择只记录数量，不保存文件名或内容。密码等已识别敏感字段脱敏。刷新和同标签页普通跳转后可继续录制；浏览器地址栏、系统窗口、跨域 iframe、拖动完整轨迹及所有复杂控件不保证覆盖。这是操作日志，不是视频，也不代表所有记录都能自动重放。
 
 ```powershell
 npm ci
@@ -70,6 +84,8 @@ npm run verify:extension -w @web-agent/extension
 
 打开 Chrome 的 `chrome://extensions`，启用开发者模式，选择“加载已解压的扩展程序”，加载 `apps/extension/dist`。更改代码后重新 build，在扩展管理页点刷新，再刷新目标网页。录制面板由扩展注入普通 HTTP/HTTPS 页面；Chrome 内部页面、商店及其他禁止注入的页面不支持。
 
+构建会更新扩展的开发构建版本，并在 manifest 中引用带内容哈希的后台脚本，避免复用浏览器配置时继续运行旧版 Service Worker。升级后仍需关闭旧录制浏览器并重新启动；不需要删除浏览器配置或登录态。只修改脚本地址而不改变扩展版本不足以完成升级，构建校验会同时检查两者。
+
 ## Fixture 运行
 
 在仓库根目录运行以下命令，终端打印临时本地地址，打开该地址的 `/rta`。保持终端运行，Ctrl+C 停止。
@@ -83,14 +99,13 @@ Fixture 只包含业务查询、表格、分页等测试场景，没有录制控
 ## Recorder 使用
 
 1. 在仓库根目录执行 `npm exec -- web-agent record --url <URL>`，自动打开独立 Chromium、加载 Extension 并启动本地保存服务。终端打印实际服务地址及本次进程有效的配对码。仅手动加载扩展的开发方式使用 `npm run recorder`，其默认服务地址为 `http://127.0.0.1:4317`。
-2. 打开目标网页，再打开扩展 popup，选择“目标页面”，填入本地服务地址和配对码，点击“连接保存服务”。配对码只进入扩展页面与内存，不进入网页面板或录制文件。
+2. CLI 对启动页面自动配对；仅自动配对失败或手动加载扩展时，在 popup 选择“目标页面”，填入本地服务地址和配对码，点击“连接保存服务”。配对码只进入扩展页面与内存，不进入网页面板或录制文件。
 3. 在网页右上角面板点击“开始录制”。确认 `Recording: ON`，演示输入与查询；Events 随操作增长。
-4. 输入变量名（例如 `accountId`），点击“标记变量”，再点击已输入的账户字段。敏感字段先勾选“敏感变量”；标记会清理已有录制中的对应值，后续输入也会脱敏。
-5. 选择提取类型、填写输出键（例如 `results`），点击“标记提取”，再点击结果 table。
-6. 选择断言类型，填写预期值（包含文本可填 `{{accountId}}`），点击“标记断言”，再点击结果区域。该断言始终 `required=true`。
-7. 点击“停止录制”，等待面板显示“已保存”及 Workflow 文件路径。若提示“保存结果待确认”，检查本地目录；响应丢失不能证明保存失败，不要盲目重复保存。
+4. 点击“停止录制”，等待面板显示“已保存”及操作记录目录。此时 `Recording: OFF`，后续操作不再记录。若提示“保存结果待确认”，检查本地目录，不要盲目重复保存。
 
-目标必须有唯一、稳定的定位信息；无法唯一定位会显示错误。选定标签页通过 opener 打开的新标签可继承会话；顶层 UI 可标注有稳定标识的同源 iframe。重启保存服务后需重新配对。未连接时仍可在扩展 session 中缓冲脱敏录制，但不会自动产生磁盘 Workflow。CLI 只在 UI 真正开始后输出 Session，保存完成后输出 Workflow 路径。
+需要重放时，可在停止前展开“高级选项”，勾选“同时尝试生成重放工作流”，再按需标注变量、表格提取和断言：变量选择实际输入过的字段；表格提取选择结果表格；文本断言填写预期文字并选择结果区域。标记敏感变量时先勾选“敏感变量”。没有高级需求可完全忽略这些控件。转换失败只显示附加提示，不撤销已保存的操作记录。
+
+普通操作记录不要求稳定定位信息；高级标注目标需要唯一定位。选定标签页通过 opener 打开的新标签可继承会话；顶层 UI 可标注有稳定标识的同源 iframe。重启保存服务后需重新配对。未连接时可缓冲脱敏录制；连接后再点停止保存到磁盘。关闭浏览器前应先停止并确认保存。服务单次请求上限为 5 MiB，超出会报错，尚不支持无限时长连续录制。
 
 ## Record-to-Workflow 文件流程
 
@@ -99,14 +114,14 @@ data/recordings/<sessionId>/
   metadata.json
   raw-events.ndjson
   annotations.json
-  normalized-actions.json
+  normalized-actions.json # 仅尝试生成工作流时产生
   screenshots/             # 未配置安全截图处理时不保存原始截图
 workflows/<workflowId>/
   v1.json
   current.json             # { "currentVersion": 1 }
 ```
 
-停止后服务自动持久化脱敏 RawEvent 与 Annotation，读取校验后的文件，执行 Normalizer、Builder 和版本保存。变量原值替换成 `{{accountId}}`，无敏感默认值。保存使用 create-only 版本文件与原子 current 指针更新；版本单调递增，不静默覆盖。
+停止后服务先持久化脱敏 RawEvent 与 Annotation，`metadata.json` 是完整保存的标志。只有选择生成工作流时才继续执行 Normalizer、Builder 和版本保存；默认只保存操作记录。工作流中的变量原值替换成 `{{accountId}}`，无敏感默认值。版本文件保持 create-only 与原子 current 指针更新，不静默覆盖。
 
 异常恢复边界见 [Workflow persistence recovery](docs/workflow-persistence-recovery.md)。完整 UI 验收位于 [record-to-workflow.e2e.spec.ts](tests/record-to-workflow.e2e.spec.ts)，生成的原始数据、动作、Workflow、截图和三次 RunResult 保留在 `test-results/record-to-workflow.e2e-*/`，下次 E2E 会替换这些临时证据。
 

@@ -1,0 +1,70 @@
+import { test, expect, chromium } from '@playwright/test';
+import { cp, mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { startFixtureServer } from '@web-agent/fixture-site';
+import { startRecordingService } from '@web-agent/recording-service';
+
+test('upgrading an extension in an existing profile replaces the cached pre-focus worker', async ({}, info) => {
+  test.setTimeout(60000);
+  const root = info.outputPath('upgrade'); await mkdir(root, { recursive: true });
+  const extension = join(root, 'extension');
+  await cp(resolve('apps/extension/dist'), extension, { recursive: true });
+  const manifest = JSON.parse(await readFile(join(extension, 'manifest.json'), 'utf8'));
+  expect(manifest.background.service_worker).toMatch(/serviceWorker\.[a-f0-9]+\.js$/);
+  const currentWorker = await readFile(join(extension, 'background/serviceWorker.js'), 'utf8');
+  const oldWorker = currentWorker.replace('"keydown","focus","contextmenu"', '"keydown","contextmenu"');
+  expect(oldWorker).not.toBe(currentWorker);
+  await writeFile(join(extension, 'background/serviceWorker.js'), oldWorker);
+  await writeFile(join(extension, 'manifest.json'), JSON.stringify({ ...manifest, version: '0.1.0', background: { ...manifest.background, service_worker: 'background/serviceWorker.js' } }));
+  const fixture = await startFixtureServer();
+  const service = await startRecordingService({ root });
+  const launch = () => chromium.launchPersistentContext(join(root, 'profile'), { channel: 'chromium', headless: true, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`] });
+  let context = await launch();
+  context.setDefaultTimeout(8000);
+  try {
+    console.info('Upgrade regression: opening old worker');
+    const oldPage = await context.newPage(); await oldPage.goto(fixture.baseUrl + '/rta');
+    await oldPage.evaluate(() => localStorage.setItem('upgrade-test', 'preserved'));
+    const oldUi = oldPage.locator('web-agent-recorder');
+    await oldUi.getByRole('button', { name: '开始录制', exact: true }).click();
+    await expect(oldUi.getByTestId('recording')).toHaveText('Recording: ON');
+    await oldPage.getByLabel('账户ID', { exact: true }).click();
+    await expect(oldUi.locator('#error')).toContainText('录制操作失败');
+    await expect(oldUi.getByTestId('events')).toHaveText('Events: 2');
+    console.info('Upgrade regression: reproduced focus rejection, closing old browser');
+    await context.close();
+
+    // Same extension path and browser profile; the build updates the version and worker URL.
+    await cp(resolve('apps/extension/dist'), extension, { recursive: true });
+    console.info('Upgrade regression: launching same profile with versioned worker');
+    context = await launch();
+    context.setDefaultTimeout(8000);
+    const page = await context.newPage(); await page.goto(fixture.baseUrl + '/rta');
+    expect(await page.evaluate(() => localStorage.getItem('upgrade-test'))).toBe('preserved');
+    const worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
+    console.info('Upgrade regression: loaded worker', worker.url());
+    expect(worker.url()).toContain(manifest.background.service_worker);
+    const popup = await context.newPage(); await popup.goto(`chrome-extension://${new URL(worker.url()).host}/popup.html`);
+    await popup.getByLabel('目标页面', { exact: true }).selectOption({ label: fixture.baseUrl + '/rta' });
+    await popup.getByLabel('本地服务地址', { exact: true }).fill(service.baseUrl);
+    await popup.getByLabel('配对码', { exact: true }).fill(service.capability);
+    await popup.getByRole('button', { name: '连接保存服务', exact: true }).click();
+    await expect(popup.getByRole('status')).toHaveText('保存服务：已连接'); await popup.close();
+    const ui = page.locator('web-agent-recorder');
+    await ui.getByRole('button', { name: '开始录制', exact: true }).click();
+    await expect(ui.getByTestId('recording')).toHaveText('Recording: ON');
+    await page.getByLabel('账户ID', { exact: true }).click();
+    await expect(ui.getByTestId('events')).toHaveText('Events: 3');
+    await expect(ui.locator('#error')).toBeEmpty();
+    await page.getByLabel('账户ID', { exact: true }).fill('RTA002');
+    await page.getByRole('button', { name: '查询', exact: true }).click();
+    await ui.getByRole('button', { name: '停止录制', exact: true }).click();
+    await expect(ui.getByTestId('saved')).toContainText('已保存：');
+    await expect(ui.locator('#error')).toBeEmpty();
+    const [id] = await readdir(join(root, 'data/recordings'));
+    const raw = (await readFile(join(root, 'data/recordings', id, 'raw-events.ndjson'), 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+    expect(raw.some(e => e.type === 'focus')).toBe(true);
+    expect(raw.some(e => e.type === 'input' && e.value === 'RTA002')).toBe(true);
+    await page.screenshot({ path: info.outputPath('upgraded-recorder.png') });
+  } finally { await context.close(); await service.close(); await fixture.close(); }
+});

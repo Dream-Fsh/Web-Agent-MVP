@@ -15,6 +15,7 @@ test('visible Extension records iframe actions and annotations, then replays in 
     const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const popup=await context.newPage();await popup.goto(`chrome-extension://${new URL(worker.url()).host}/popup.html`);
     await popup.getByLabel('目标页面',{exact:true}).selectOption({label:fixture.baseUrl+'/record-contexts'});await popup.getByLabel('本地服务地址',{exact:true}).fill(bridge.baseUrl);await popup.getByLabel('配对码',{exact:true}).fill(bridge.capability);await popup.getByRole('button',{name:'连接保存服务',exact:true}).click();await expect(popup.getByRole('status')).toHaveText('保存服务：已连接');await popup.close();
     const ui=page.locator('web-agent-recorder');const frame=page.frameLocator('#query-frame');
+    await ui.locator('summary').click();await ui.locator('#generate-workflow').check();
     await ui.getByRole('button',{name:'开始录制',exact:true}).click();await expect(ui.getByTestId('recording')).toHaveText('Recording: ON');
     await frame.getByLabel('账户ID',{exact:true}).fill('10001');await frame.getByRole('button',{name:'查询',exact:true}).click();await expect(frame.locator('#query-result')).toContainText('10001');
     await ui.getByRole('button',{name:'标记变量',exact:true}).click();await frame.getByLabel('账户ID',{exact:true}).click();await expect(ui.getByTestId('annotations')).toHaveText('Annotations: 1');
@@ -39,6 +40,7 @@ test('visible Extension records a new tab and continues actions, then replays wi
     await ui.getByRole('button',{name:'开始录制',exact:true}).click();await expect(ui.getByTestId('recording')).toHaveText('Recording: ON');
     const opened=page.waitForEvent('popup');await page.getByRole('link',{name:'查询新标签',exact:true}).click();const frame=await opened;
     await frame.waitForLoadState('domcontentloaded');ui=frame.locator('web-agent-recorder');await expect(ui.getByTestId('recording')).toHaveText('Recording: ON');
+    await ui.locator('summary').click();await ui.locator('#generate-workflow').check();
     await frame.getByLabel('账户ID',{exact:true}).fill('10001');await frame.getByRole('button',{name:'查询',exact:true}).click();await expect(frame.locator('#query-result')).toContainText('10001');
     await ui.getByRole('button',{name:'标记变量',exact:true}).click();await frame.getByLabel('账户ID',{exact:true}).click();await expect(ui.getByTestId('annotations')).toHaveText('Annotations: 1');
     await ui.getByRole('button',{name:'标记提取',exact:true}).click();await frame.locator('table').click();await expect(ui.getByTestId('annotations')).toHaveText('Annotations: 2');

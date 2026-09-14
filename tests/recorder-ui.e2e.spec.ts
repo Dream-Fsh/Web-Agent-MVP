@@ -16,6 +16,7 @@ test('extension visible UI records, annotates and stops with redacted storage', 
     const page = await context.newPage();
     await page.goto(`${fixture.baseUrl}/login?token=URL_SECRET`);
     const ui = page.locator('web-agent-recorder');
+    await ui.locator('summary').click();
     await expect(ui.getByRole('button', { name: '开始录制', exact: true })).toBeVisible();
     await page.evaluate(() => (document.querySelector('web-agent-recorder')!.shadowRoot!.getElementById('start') as HTMLButtonElement).click());
     await expect(ui.getByTestId('recording')).toHaveText('Recording: OFF');
@@ -28,6 +29,7 @@ test('extension visible UI records, annotates and stops with redacted storage', 
     await ui.getByRole('button', { name: '标记变量', exact: true }).click();
     await page.getByLabel('用户名', { exact: true }).click();
     await expect(ui.getByTestId('annotations')).toHaveText('Annotations: 1');
+    await ui.getByLabel('提取类型', { exact: true }).selectOption('extractText');
     await ui.getByRole('button', { name: '标记提取', exact: true }).click();
     await page.getByRole('heading', { name: '登录', exact: true }).click();
     await expect(ui.getByTestId('annotations')).toHaveText('Annotations: 2');

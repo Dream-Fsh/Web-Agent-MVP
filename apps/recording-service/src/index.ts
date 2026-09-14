@@ -18,7 +18,7 @@ async function readBody(request: IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-export async function startRecordingService(options: { root: string; port?: number; leaseOptions?:{heartbeatMs?:number;timeoutMs?:number}; onSessionStarted?:(id:string)=>void; onWorkflowSaved?:(saved:{path:string;version:number})=>void }): Promise<{ baseUrl: string; capability: string; close: () => Promise<void> }> {
+export async function startRecordingService(options: { root: string; port?: number; leaseOptions?:{heartbeatMs?:number;timeoutMs?:number}; onSessionStarted?:(id:string)=>void; onRecordingSaved?:(path:string)=>void; onWorkflowSaved?:(saved:{path:string;version:number})=>void }): Promise<{ baseUrl: string; capability: string; close: () => Promise<void> }> {
   const root = resolve(options.root);
   const lease=await acquirePersistenceLease(join(root,'data/recording.lock'),options.leaseOptions);
   const capability = randomBytes(24).toString('hex');
@@ -45,10 +45,18 @@ export async function startRecordingService(options: { root: string; port?: numb
     }
     if (request.method !== 'POST' || request.url !== '/recordings') { response.writeHead(404).end(); return; }
     try {
-      const input = await readBody(request) as { sessionId?: unknown; events?: unknown; annotations?: unknown };
+      const input = await readBody(request) as { sessionId?: unknown; events?: unknown; annotations?: unknown; generateWorkflow?: boolean };
       if (!input || typeof input.sessionId !== 'string' || !Array.isArray(input.events) || !input.events.length || !Array.isArray(input.annotations)) throw new Error('Invalid recording envelope');
       await lease.assertOwned();
       const location = await persistRawRecording({ sessionId: input.sessionId, events: input.events, annotations: input.annotations }, join(root, 'data/recordings'));
+      const recordingPath = join(root, 'data/recordings', input.sessionId);
+      try { options.onRecordingSaved?.(recordingPath); } catch { /* Observers do not change a committed save. */ }
+      // Plain recording succeeds independently of optional workflow conversion.
+      if (!(input.generateWorkflow ?? input.annotations.length > 0)) {
+        response.writeHead(201, { 'content-type': 'application/json' }).end(JSON.stringify({ recordingPath }));
+        return;
+      }
+      try {
       // Consume the validated, redacted persisted representation, never the incoming payload.
       const events = (await readFile(location.rawEventsPath, 'utf8')).trim().split('\n').map(line => parseRawEvent(JSON.parse(line)));
       const annotations = (JSON.parse(await readFile(location.annotationsPath, 'utf8')) as unknown[]).map(parseRecordingAnnotation);
@@ -56,8 +64,11 @@ export async function startRecordingService(options: { root: string; port?: numb
       await writeFile(join(root, 'data/recordings', input.sessionId, 'normalized-actions.json'), JSON.stringify(actions, null, 2) + '\n');
       const workflow = buildWorkflow(actions, annotations, { id: input.sessionId, sessionId: input.sessionId, name: '录制查询', startUrl: events[0].url, createdAt: new Date().toISOString() });
       const saved = await saveWorkflow(workflow, join(root, 'workflows'));
-      response.writeHead(201, { 'content-type': 'application/json' }).end(JSON.stringify(saved));
+      response.writeHead(201, { 'content-type': 'application/json' }).end(JSON.stringify({ ...saved, recordingPath }));
       try { options.onWorkflowSaved?.(saved); } catch { /* An observer cannot undo committed persistence. */ }
+      } catch {
+        response.writeHead(201, { 'content-type': 'application/json' }).end(JSON.stringify({ recordingPath, workflowWarning: '操作记录已保存；工作流转换未完成，部分动作或标注不支持重放。' }));
+      }
     } catch {
       // Neither captured values nor request credentials belong in diagnostics.
       response.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: '录制校验或 Workflow 保存失败；已保存的录制可供检查。' }));
