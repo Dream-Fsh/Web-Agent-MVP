@@ -8,6 +8,14 @@ import { parseArguments } from './arguments.js';
 export interface CliOptions { root?:string; workflowsRoot?:string; onOutput?:(line:string)=>void; onExitCode?:(code:number)=>void; signal?:AbortSignal }
 const help = `web-agent login [--url URL]
 web-agent record [--url URL]
+web-agent agent skills
+web-agent agent skills register <manifest.json> --confirm [--var name=value]
+web-agent agent skills enable <skillId> --confirm
+web-agent agent skills disable <skillId>
+web-agent agent plan "<task>" [--var name=value] [--skill skillId]
+web-agent agent execute <planId> --confirm [--headless]
+web-agent agent cancel <planId>
+web-agent agent result <planId>
 web-agent recording recover
 web-agent workflow list
 web-agent workflow inspect <id>
@@ -19,6 +27,10 @@ web-agent repair <runId> [--var name=value] [--headless]
 Options: --root DIR, --cdp-port PORT (local debugging only)`;
 
 export async function runCli(args:string[],options:CliOptions={}):Promise<string> {
+  if (args[0] === 'agent') {
+    const { runAgentCli } = await import('./agent/cli.js');
+    return runAgentCli(args, options);
+  }
   const parsed=parseArguments(args);
   if(parsed.help || !parsed.positional.length)return help;
   const [command,subcommand,name,version]=parsed.positional;

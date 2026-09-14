@@ -6,6 +6,7 @@ blob-report/
 data/browser-profile/
 data/recordings/
 data/runs/
+data/agent/
 data/failures/
 data/task09-evidence/
 /workflows/

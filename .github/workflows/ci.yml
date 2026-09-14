@@ -29,11 +29,18 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm run verify:extension -w @web-agent/extension
       - run: npm run test:e2e
       - run: npm run verify
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: extension-e2e-evidence
-          path: test-results/
+          path: |
+            test-results/
+            !test-results/**/profile/**
+            !test-results/**/browser-profile/**
+            !test-results/**/record-profile/**
+            !test-results/**/recordings/**
+            !test-results/**/.key
           retention-days: 7

@@ -24,6 +24,7 @@
   "exports": {
     "./production": "./dist/production.js",
     ".": "./dist/index.js",
-    "./transport": "./dist/transport.js"
+    "./transport": "./dist/transport.js",
+    "./planner": "./dist/planner.js"
   }
 }
