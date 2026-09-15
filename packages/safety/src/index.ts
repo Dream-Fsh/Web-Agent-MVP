@@ -24,12 +24,13 @@ function redactValue(value: unknown, key = ""): unknown {
 export function redactSensitiveData<T>(value: T): T { return redactValue(value) as T; }
 
 /** URL candidates in prose have lexical boundaries, unlike a structured URL field.
- * Include protocol-relative and percent-encoded URLs, but never span Markdown
- * delimiters. TAB/CR/LF inside userinfo belong to the same candidate (WHATWG).
+ * Consume userinfo through its @ before treating parentheses as prose boundaries.
+ * A slash ends the authority; Markdown's next URL therefore cannot be swallowed.
+ * TAB/CR/LF inside userinfo belong to the same candidate (WHATWG).
  * Ambiguous backslash authorities fail closed instead of becoming secret paths.
  */
 export function redactUrlText(text: string): string {
-  const candidates = /(?:https?(?::|%3a))?(?:[\/\\]|%2f|%5c){2}(?:[^ "'<>()[\]{}，。；\/]*@)?[^\s"'<>()[\]{}，。；]*/gi;
+  const candidates = /(?:https?(?::|%3a))?(?:[\/\\]|%2f|%5c){2}(?:[^ "'<>\/]*?(?:@|%40))?[^\s"'<>()[\]{}，。；]*/gi;
   return text.replace(candidates, candidate => {
     let value = candidate;
     // Decode an encoded URL envelope, not arbitrary surrounding prose or paths.
