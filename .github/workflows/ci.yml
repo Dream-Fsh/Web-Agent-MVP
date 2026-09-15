@@ -16,6 +16,8 @@ concurrency:
 jobs:
   verify:
     name: verify
+    env:
+      NODE_OPTIONS: --require=${{ github.workspace }}/scripts/no-real-model.cjs
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
