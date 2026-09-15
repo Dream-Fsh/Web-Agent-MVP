@@ -205,3 +205,45 @@ export function parseWorkflow(input: unknown): Workflow {
   if (!result.success) throw new WorkflowValidationError(result.error.issues);
   return result.data;
 }
+
+export interface RecordingAnnotation {
+  id: string;
+  sessionId: string;
+  type: 'variable' | 'extraction' | 'requiredAssertion';
+  targetActionId?: string;
+  target: Target;
+  metadata: Record<string, unknown>;
+}
+const annotationBase = {
+  id: z.string().min(1), sessionId: z.string().min(1),
+  targetActionId: z.string().min(1).optional(), target: targetSchema,
+};
+const identifier = z.string().regex(/^[A-Za-z][A-Za-z0-9_]*$/);
+const annotationSchema = z.discriminatedUnion('type', [
+  z.object({ ...annotationBase, type: z.literal('variable'), targetActionId: z.string().min(1),
+    metadata: z.object({ originalValue: z.string(), variableName: identifier, sensitive: z.boolean() }).strict(),
+  }).strict(),
+  z.object({ ...annotationBase, type: z.literal('extraction'),
+    metadata: z.object({ operation: z.enum(['extractText', 'extractTable', 'extractCount', 'extractList']), key: identifier }).strict(),
+  }).strict(),
+  z.object({ ...annotationBase, type: z.literal('requiredAssertion'),
+    metadata: z.object({ assertionType: z.enum(['assertVisible', 'assertText', 'assertCount']), expected: z.union([z.string(), z.number()]), required: z.literal(true) }).strict(),
+  }).strict(),
+]).superRefine((annotation, context) => {
+  if (annotation.type === 'variable' && annotation.metadata.sensitive && annotation.metadata.originalValue !== '[REDACTED]')
+    context.addIssue({ code: 'custom', message: 'Sensitive variable must not contain its actual value' });
+});
+export function parseRecordingAnnotation(input: unknown): RecordingAnnotation {
+  return annotationSchema.parse(input);
+}
+export function validateAnnotationReferences(annotations: RecordingAnnotation[], events: RawEvent[], sessionId: string): void {
+  const ids = new Set<string>();
+  for (const annotation of annotations) {
+    if (ids.has(annotation.id)) throw new Error('Duplicate annotation id');
+    ids.add(annotation.id);
+    if (annotation.sessionId !== sessionId) throw new Error('Annotation session does not match');
+    const event = events.find(event => event.id === annotation.targetActionId && event.sessionId === sessionId);
+    if (annotation.targetActionId && !event) throw new Error('Invalid annotation action reference');
+    if (annotation.type === 'variable' && event?.type !== 'input' && event?.type !== 'change') throw new Error('Variable annotation requires an input action');
+  }
+}

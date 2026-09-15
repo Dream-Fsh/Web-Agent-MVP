@@ -18,7 +18,7 @@ const domEventTypes: Readonly<Record<string, RawEventType>> = {
   click: "click", dblclick: "dblclick", input: "input", change: "change", submit: "submit",
 };
 
-function snapshot(element: Element): ElementSnapshot {
+export function snapshot(element: Element): ElementSnapshot {
   const attributes = Object.fromEntries([...element.attributes]
     .filter((attribute) => attribute.name !== "value")
     .map((attribute) => [attribute.name, attribute.value]));
@@ -40,6 +40,7 @@ export function startDomRecorder(document: Document, options: DomRecorderOptions
     recordCapturedEvent(event, options.persist);
   };
   const handler = (event: Event) => {
+    if (event.composedPath().some(node => node instanceof Element && node.tagName.toLowerCase() === 'web-agent-recorder')) return;
     const type = domEventTypes[event.type];
     if (!type) return;
     const value = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement ? event.target.value : undefined;
@@ -54,6 +55,7 @@ export function startDomRecorder(document: Document, options: DomRecorderOptions
   window.addEventListener("popstate", navigation);
   window.addEventListener("hashchange", navigation);
   window.addEventListener("__web_agent_spa_navigation__", spaNavigation);
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") emit("tab-change"); });
-  return () => { for (const type of Object.keys(domEventTypes)) document.removeEventListener(type, handler, true); window.removeEventListener("popstate", navigation); window.removeEventListener("hashchange", navigation); window.removeEventListener("__web_agent_spa_navigation__", spaNavigation); };
+  const visibility = () => { if (document.visibilityState === "visible") emit("tab-change"); };
+  document.addEventListener("visibilitychange", visibility);
+  return () => { for (const type of Object.keys(domEventTypes)) document.removeEventListener(type, handler, true); window.removeEventListener("popstate", navigation); window.removeEventListener("hashchange", navigation); window.removeEventListener("__web_agent_spa_navigation__", spaNavigation); document.removeEventListener('visibilitychange', visibility); };
 }

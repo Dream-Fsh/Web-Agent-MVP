@@ -25,9 +25,15 @@ function rtaPage(url: URL, route = "/rta"): string {
     const number = String(first + index).padStart(3, "0");
     return `<tr><td>RTA${number}</td><td>策略 ${number}</td><td>${index % 2 === 0 ? "生效中" : "已暂停"}</td></tr>`;
   }).join("");
-  const result = accountId ? `<p role="status">账户 ${accountId} 的查询结果</p>` : "";
+  const result = `<p id="query-result" role="status" ${accountId ? '' : 'hidden'}>账户 ${accountId} 的查询结果</p>`;
   const next = currentPage < 2 ? `<a rel="next" href="${route}?page=${currentPage + 1}">下一页</a>` : "";
-  return document("RTA 策略", `<label>账户ID <input name="accountId" value="${accountId}"></label><button type="button" role="button">查询</button>${result}<table><thead><tr><th>策略ID</th><th>策略名称</th><th>状态</th></tr></thead><tbody>${rows}</tbody></table><nav aria-label="分页"><a href="${route}?page=1">第 1 页</a><a href="${route}?page=2">第 2 页</a>${next}</nav>`);
+  return document("RTA 策略", `<label>账户ID <input name="accountId" value="${accountId}"></label><button type="button" role="button">查询</button>${result}<table><thead><tr><th>策略ID</th><th>策略名称</th><th>状态</th></tr></thead><tbody>${rows}</tbody></table><nav aria-label="分页"><a href="${route}?page=1">第 1 页</a><a href="${route}?page=2">第 2 页</a>${next}</nav><script>
+  document.querySelector('button').addEventListener('click', () => {
+    const id = document.querySelector('input[name="accountId"]').value;
+    const result = document.querySelector('#query-result'); result.hidden = false;
+    result.textContent = '账户 ' + id + ' 的查询结果';
+    for (const row of document.querySelectorAll('tbody tr')) row.cells[1].textContent = '账户 ' + id + ' 策略 ' + row.cells[0].textContent.slice(3);
+  });</script>`);
 }
 
 function ajaxPaginationPage(): string {
