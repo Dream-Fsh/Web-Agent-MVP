@@ -31,6 +31,7 @@ jobs:
         env:
           NODE_OPTIONS: --require=${{ github.workspace }}/scripts/no-real-model.cjs
       - run: npm run build
+      - run: npm run verify:extension -w @web-agent/extension
       - run: npm run test:e2e
         env:
           NODE_OPTIONS: --require=${{ github.workspace }}/scripts/no-real-model.cjs
@@ -41,5 +42,11 @@ jobs:
         if: always()
         with:
           name: extension-e2e-evidence
-          path: test-results/
+          path: |
+            test-results/
+            !test-results/**/profile/**
+            !test-results/**/browser-profile/**
+            !test-results/**/record-profile/**
+            !test-results/**/recordings/**
+            !test-results/**/.key
           retention-days: 7

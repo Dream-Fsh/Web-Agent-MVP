@@ -6,9 +6,9 @@ import { loadWorkflow } from '@web-agent/workflow-builder/persistence';
 import { redactSensitiveData, redactWorkflow } from '@web-agent/safety';
 import { saveFailurePackage } from '@web-agent/failure';
 import { openAutomationBrowser } from './browser.js';
-import { runWorkflow, type RunResult } from './index.js';
+import { runWorkflow, type RunResult, type RunOptions } from './index.js';
 
-export interface StoredRunOptions { root: string; workflowsRoot?: string; headless?: boolean; variables?: Record<string,string|number|boolean>; signal?:AbortSignal; localOnly?:boolean }
+export interface StoredRunOptions { root: string; workflowsRoot?: string; headless?: boolean; variables?: Record<string,string|number|boolean>; signal?:AbortSignal; localOnly?:boolean; validateTarget?:RunOptions['validateTarget'] }
 
 export function resolveBindings(workflow: Workflow, supplied: StoredRunOptions['variables'] = {}) {
   const bindings: Record<string,string|number|boolean> = {};
@@ -60,7 +60,7 @@ export async function executeStoredRun(workflow:Workflow,options:StoredRunOption
   try {
     options.signal?.throwIfAborted();
     let result:RunResult;
-    try { result = await runWorkflow(page,workflow,{variables,runId}); }
+    try { result = await runWorkflow(page,workflow,{variables,runId,validateTarget:options.validateTarget}); }
     catch (error) { const now = new Date().toISOString(); result = {runId,workflowId:workflow.id,status:'failed',steps:[{id:'navigation',type:'navigate',status:'failed',message:error instanceof Error ? error.message : String(error)}],outputs:{},downloads:[],startedAt:now,finishedAt:now}; }
     options.signal?.throwIfAborted();
     const safeResult:RunResult = {...result,outputs:redactRunEvidence(result.outputs,workflow,variables),downloads:redactRunEvidence(result.downloads,workflow,variables),steps:result.steps.map(step=>({...step,message:step.message?redactRunEvidence(step.message,workflow,variables):undefined}))};

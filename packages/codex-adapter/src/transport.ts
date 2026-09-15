@@ -5,8 +5,8 @@ import {join,delimiter} from 'node:path';
 import {redactSensitiveData} from '@web-agent/safety';
 import {workflowRepairPatchSchema,type WorkflowRepairPatch} from './index.js';
 
-async function codexCommand():Promise<string[]> {
-  if(process.env.WEB_AGENT_CODEX_COMMAND) {
+export async function codexCommand(allowConfigured = true):Promise<string[]> {
+  if(allowConfigured && process.env.WEB_AGENT_CODEX_COMMAND) {
     const configured:unknown=JSON.parse(process.env.WEB_AGENT_CODEX_COMMAND);
     if(!Array.isArray(configured)||!configured.length||!configured.every(value=>typeof value==='string'&&value))throw new Error('Invalid Codex command configuration');
     return configured;

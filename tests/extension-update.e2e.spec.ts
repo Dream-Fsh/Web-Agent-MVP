@@ -39,7 +39,9 @@ test('upgrading an extension in an existing profile replaces the cached pre-focu
     console.info('Upgrade regression: launching same profile with versioned worker');
     context = await launch();
     context.setDefaultTimeout(8000);
-    const page = await context.newPage(); await page.goto(fixture.baseUrl + '/rta');
+    const page = await context.newPage();
+    page.on('pageerror', error => console.info('Upgrade page initialization error:', error.message));
+    await page.goto(fixture.baseUrl + '/rta');
     expect(await page.evaluate(() => localStorage.getItem('upgrade-test'))).toBe('preserved');
     const worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
     console.info('Upgrade regression: loaded worker', worker.url());

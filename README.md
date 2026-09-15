@@ -13,15 +13,17 @@ Extension popup（仅配对）+ 网页 recorder overlay（操作与标注）
   → RunResult（status、outputs、downloads）
 ```
 
-RawEvent 与 RecordingAnnotation 独立保存。UI 不构造 Workflow Step；Builder 不依赖 Extension 或 Codex。CLI 解析参数后调用现有 packages；Codex Adapter 仅在显式 repair 时生成受限 Patch，不参与普通录制、生成或执行。
+RawEvent 与 RecordingAnnotation 独立保存。UI 不构造 Workflow Step；Builder 不依赖 Extension 或 Codex。CLI 解析参数后调用现有 packages；Codex Adapter 的 repair Patch 与新增 Agent 任务规划是独立接口。模型不参与普通录制，也不生成 Agent 的浏览器步骤或业务结果。
 
 ## 已完成功能与项目状态
 
 Completed：Protocol、Fixture、Safety / Redaction、Recorder Core、Recording Adapter、RecordingAnnotation、Normalizer、Locator Engine、Generic Runner、Assertions、Extraction、Workflow Builder、版本化 Workflow Persistence、Failure Package、验证后 Repair Patch、Integration Hardening、可见 Record-to-Workflow E2E。
 
-Current：CLI Production Wiring & Stabilization。10A–10D 已提交，10D 本地验收为 100 个包单元测试、3 个脚本检查、10 个 E2E。本次文档提交时，10E/10F 远端验收：**待验收**；以 [Task 10 PR](https://github.com/Dream-Fsh/Web-Agent-MVP/pull/3) 最新 head 对应的完整 CI 为准，Task 09 的成功记录不能替代。独立 review：**待审查**，CI 与自检不替代独立审查。
+Task 10 基线：40bf3df3f6a7066b321b4c1e0dfbe2d6906fe843 的[完整 CI 已通过](https://github.com/Dream-Fsh/Web-Agent-MVP/actions/runs/34802965039)。[Task 10 PR](https://github.com/Dream-Fsh/Web-Agent-MVP/pull/3) 仍为 Draft，独立 review：**待审查**；CI 与自检不替代独立审查，后续提交以各自完整 CI 为准。
 
-Next：经单独授权的 Real-site Read-only Pilot，目前尚未启动。准备清单见 [只读试点](docs/pilot-readonly.md)。
+Task 11A：新增本地 fixture Agent dispatch 实验，支持选择已验证且显式启用的固定版本技能；模型替身与真实浏览器闭环已验证，单次获准的真实模型 smoke 未取得有效结果，真实模型规划仍待验证。详见 [11A 验收](docs/task11a-acceptance.md)。这不构成合并或发布许可。
+
+Next：独立审查；Real-site Read-only Pilot 尚未启动，需单独授权。准备清单见 [只读试点](docs/pilot-readonly.md)。
 
 ## Quick Start
 
@@ -145,7 +147,74 @@ npm exec -- web-agent recording recover
 
 `rollback` 只更新 current 指针，保留所有历史版本；下一次保存仍使用高于已有版本的编号。`recording recover` 在进程退出且 heartbeat 超时后归档 abandoned 锁并保留审计；active / recent 不会抢占。默认 heartbeat 每秒、超时 30 秒。恢复不续录，也不删除旧锁证据；缺失 owner 的旧式锁不能自动判断归属。详见 [10B 恢复](docs/task10b-recovery.md)。
 
+## 新增：Agent 技能规划与确认执行（Task 11A）
+
+本轮只能调用已有 Workflow，不能自由浏览、从普通日志学习、组合多个 Workflow 或自动 repair。仅开放本地 fixture 的账户表格查询和 dashboard 标题提取；账户参数只接受 1–12 位数字，敏感参数明确拒绝。只读描述不会扩展 Safety allowlist。普通录制仍是“开始 → 操作 → 停止 → 保存”，不要求标注。
+
+先启动上述 Fixture 并保持终端运行。按 Recorder 高级可选流程生成查询 Workflow：输入账户、查询，标注 accountId 变量、结果表格提取及 required 文本断言，然后勾选生成 Workflow 并停止。关闭录制浏览器后，用实际 Workflow ID 创建独立元数据文件 query-skill.json（不用修改业务源码）：
+
+```json
+{
+  "id": "fixture-query-v1",
+  "name": "本地账户查询",
+  "description": "查询指定账户并提取结果表格",
+  "purpose": "account_table",
+  "workflowId": "替换为实际生成的工作流ID",
+  "version": 1
+}
+```
+
+登记时从 Workflow 推导变量、必填项、输出、必需断言和站点范围，并固定版本及 SHA-256；执行一次真实本地重放，成功才保存验证证据。登记默认停用，启用还需明确确认。只有 raw-events 的记录不可登记。下面的尖括号占位符需替换成实际值：
+
+```powershell
+npm exec -- web-agent agent skills register query-skill.json --var accountId=10001 --confirm --headless
+npm exec -- web-agent agent skills enable fixture-query-v1 --confirm
+npm exec -- web-agent agent skills
+npm exec -- web-agent agent plan "查询账户 20002 的数据，并提取结果表格"
+npm exec -- web-agent agent execute <planId> --confirm --headless
+npm exec -- web-agent agent result <planId>
+```
+
+**生产规划当前阻塞，不要运行上面的真实 plan 或下面的真实 smoke。** CLI 0.147.0 拒绝当前内置 provider 的重试配置；本轮冻结这些参数，不接入候选 provider。一次子进程不证明底层无重试，真实模型全链路未验证。账户 90009 的下一次请求预览保留，需修复复审后另行授权。
+
+plan 的生产路径设计为调用真实 Codex，仅发送脱敏任务文字及必要技能描述，不发送 Workflow 步骤、DOM、截图、profile 或录制。规划不是执行：不会打开浏览器。ready 计划展示固定版本、参数、目标站点、输出和确认范围；只有显式 execute --confirm 才调用现有 Runner。
+
+缺少参数、候选不唯一或不匹配时不会执行。补充参数或指定候选后重新规划（这是另一次模型调用）：
+
+```powershell
+npm exec -- web-agent agent plan "查询账户并提取结果表格" --var accountId=20002
+npm exec -- web-agent agent plan "查询账户 20002 的表格" --skill fixture-query-v1
+npm exec -- web-agent agent cancel <planId>
+npm exec -- web-agent agent skills disable fixture-query-v1
+npm exec -- web-agent failures list
+```
+
+计划 15 分钟过期，绑定 Workflow 内容、技能状态、参数和只读范围。修改计划、版本文件、范围或停用技能都会拒绝执行；current 指向新版本不会替换已确认版本。计划在启动浏览器前被一次性消费，即使失败、取消或进程崩溃也不能重复执行，需重新规划确认。停用是永久撤销该技能 ID；重新使用需新 ID、重新验证和启用。
+
+只有真实 RunResult 成功且必需断言通过才报告成功；failed、blocked、cancelled 不混作成功。输出和证据位置由程序生成，不调用模型总结业务结果。结果保存在 data/runs、data/failures 和 data/agent；原始模型输入输出不默认落盘。data/agent 的本地完整性密钥不能共享，HMAC 防文件误改不抵御已控制本机账户的攻击者。所有命令使用同一个 --root，保护整个数据根目录，勿将 profile、录制或密钥提交 Git。
+
+明确标记的模型替身仅用于自动化测试，不代表真实模型通过。真实 smoke 默认只展示完整合成请求；确认发送前先检查预览：
+
+```powershell
+npm run agent:smoke
+# 仅在明确同意该预览发送后执行；最多一次调用，60 秒超时，不执行网页
+npm run agent:smoke -- --confirm
+npx playwright test tests/agent-dispatch.e2e.spec.ts
+```
+
+生产无模型可用、鉴权失败、超时或结构非法都会失败，不静默降级固定答案。测试替身须同时显式设置 WEB_AGENT_PLANNER_TEST_MODE=1 和 WEB_AGENT_PLANNER_TEST_COMMAND，计划会标记 test-double；正常使用不要设置。
+
 ## 验收证据
+
+### Task 11A 独立修复（最终 SHA 待定向复审）
+
+- 本地账户技能须先将 `{{accountId}}` 输入 fixture 的账户输入框，再点击查询，之后提取表格。仅在名称/描述声明变量、无关输入、未查询或查询后导航重置，不能登记。
+- 每个结果表必须包含 fixture 的三列表头及非空行；每行策略名称中的账户和策略 ID 必须与确认参数及该行 ID 对应。输入回显不是证据。验证失败返回 Agent `failed` / CLI 退出码 2，原始底层 RunResult（可能 success）保留，`taskValidation.accountIdentity` 明确失败，不改写账户。
+- 账户技能/计划固定 `contractVersion=3`，标题技能保留版本 2。账户输入、查询按钮和提取表格由 Runner 的同一解析结果校验并操作（固定 DOM 节点，不重新定位）；候选描述本身不构成证明。旧账户目录项不能静默升级，须新技能 ID、重新重放验证登记和明确启用；旧计划重新确认也不能绕过。
+- 本地 fixture 目标须为唯一可用的 `input[name=accountId]`、唯一文字为“查询”的按钮及唯一 HTML table。存在歧义或回退至无关元素时拒绝；执行时重复此检查，返回账户身份核验仍独立保留。此契约不推广到真实站点。
+- 规划错误只传递固定分类、阶段、退出码和耗时，不输出原始 stderr。未知原因保持 unknown。历史一次真实调用失败的根因仍未确定；未改 provider、重试配置或认证路径。
+- 本地和 CI 自动化仅使用显式模型替身；测试模式缺少替身直接拒绝，CI preload 还阻止启动真实 Codex。普通录制仍是“开始 → 操作 → 停止 → 保存”，不要求标注或生成 Workflow。
+- [本轮修复与证据说明](docs/task11a-independent-fixes.md)。P1-3 不在自检中宣布独立关闭。
 
 - [本轮 3 个 P1 阻塞项修复与回归证据](docs/p1-task10-fixes.md)：最终 SHA 待独立复审；两个 PR 均未合并。
 

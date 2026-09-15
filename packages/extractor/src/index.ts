@@ -1,10 +1,11 @@
-import type { Locator, Page, Frame } from "@playwright/test";
+import type { Page, Frame } from "@playwright/test";
 import type { Target } from "@web-agent/protocol";
 import { TargetResolutionError, resolveCollectionTarget, resolveSingleTarget } from "@web-agent/locator-engine";
 
 export class UnsupportedVirtualTableError extends Error { public constructor() { super("UNSUPPORTED_VIRTUAL_TABLE"); this.name = "UnsupportedVirtualTableError"; } }
 
-export async function assertSupportedTable(table: Locator): Promise<void> {
+interface ReadableElement { evaluate<R>(fn:(element:SVGElement|HTMLElement)=>R):Promise<R> }
+export async function assertSupportedTable(table: ReadableElement): Promise<void> {
   const virtual = await table.evaluate((element) => element.hasAttribute("data-virtualized") || element.getAttribute("aria-rowcount") !== null);
   if (virtual) throw new UnsupportedVirtualTableError();
 }
@@ -17,11 +18,16 @@ export async function extractCount(page: Page | Frame, target: Target): Promise<
 export interface ExtractedTable { headers: string[]; rows: string[][] }
 export async function extractTable(page: Page | Frame, target: Target): Promise<ExtractedTable> {
   const resolved = await resolveSingleTarget(page, target);
-  await assertSupportedTable(resolved.locator);
-  return {
-    headers: await resolved.locator.locator("thead th").allTextContents(),
-    rows: await resolved.locator.locator("tbody tr").evaluateAll((rows) => rows.map((row) => [...row.querySelectorAll("td")].map((cell) => cell.textContent?.trim() ?? ""))),
-  };
+  return extractResolvedTable(resolved.locator);
+}
+
+/** Reads the already selected node, including pinned nodes validated by a caller. */
+export async function extractResolvedTable(table:ReadableElement):Promise<ExtractedTable>{
+  await assertSupportedTable(table);
+  return table.evaluate(element=>({
+    headers:[...element.querySelectorAll('thead th')].map(cell=>cell.textContent??''),
+    rows:[...element.querySelectorAll('tbody tr')].map(row=>[...row.querySelectorAll('td')].map(cell=>cell.textContent?.trim()??'')),
+  }));
 }
 
 function tableFingerprint(table: ExtractedTable): string {
