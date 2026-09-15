@@ -5,7 +5,7 @@ import { parseWorkflow, type Workflow } from '@web-agent/protocol';
 import { executeStoredRun } from '@web-agent/runner/production';
 import { redactSensitiveData } from '@web-agent/safety';
 import { requestTaskPlan, taskDecisionSchema, safePlannerError } from '@web-agent/codex-adapter/planner';
-import { contract, bindings, manifestSchema, safeGoal, successful, accountIdentityMatches, type Manifest, type Contract } from './contracts.js';
+import { contract, bindings, manifestSchema, safeGoal, successful, accountIdentityMatches, fixtureTargetValidator, type Manifest, type Contract } from './contracts.js';
 import { digest, identifier, locked, publish, readSealed, exists, ids, readJson } from './store.js';
 
 type Skill = Manifest & Contract & { workflowHash: string; validation: { runId: string; at: string; workflowHash: string } };
@@ -56,7 +56,7 @@ export async function registerSkill(root: string, input: unknown, options: Optio
     const spec = contract(content.workflow, manifest);
     const variables = bindings(content.workflow, options.variables);
     if (Object.keys(spec.variables).some(name => !Object.hasOwn(variables, name))) throw new Error('Required parameter missing for validation');
-    const result = await executeStoredRun(content.workflow, { root, variables, localOnly: true, headless: options.headless, signal: options.signal });
+    const result = await executeStoredRun(content.workflow, { root, variables, localOnly: true, headless: options.headless, signal: options.signal, validateTarget:fixtureTargetValidator(manifest.purpose) });
     if (!successful(result, spec, variables)) throw new Error('Local replay validation failed; inspect data/runs and data/failures');
     if ((await frozen(root, manifest.workflowId, manifest.version)).hash !== content.hash) throw new Error('Workflow changed during validation');
     const skill: Skill = { ...manifest, ...spec, workflowHash: content.hash, validation: { runId: result.runId, at: new Date().toISOString(), workflowHash: content.hash } };
@@ -184,7 +184,7 @@ export async function executePlan(root: string, id: string, options: Options = {
     // Create-only consumption is committed BEFORE browser operations; crash means no silent retry.
     await publish(root, 'used', id, { status: 'executing', at: Date.now() });
     try {
-      const result = await executeStoredRun(workflow, { root, variables, localOnly: true, headless: options.headless, signal: options.signal });
+      const result = await executeStoredRun(workflow, { root, variables, localOnly: true, headless: options.headless, signal: options.signal, validateTarget:fixtureTargetValidator(skill.purpose) });
       const accountIdentity = accountIdentityMatches(result, skill, variables);
       const status = result.status === 'success' && !successful(result, skill, variables) ? 'failed' : result.status;
       const outcome = redactSensitiveData({ status, planId: id, modelKind: plan.modelKind, taskValidation: { accountIdentity: Object.hasOwn(skill.variables, 'accountId') ? (accountIdentity ? 'passed' : 'failed') : 'not_applicable' }, result, evidence: { run: 'data/runs/' + result.runId + '.json', failure: result.status === 'success' ? null : 'data/failures/' + result.runId } });

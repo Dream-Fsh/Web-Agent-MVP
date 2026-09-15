@@ -1,7 +1,9 @@
-import type { BrowserContext, Page } from "@playwright/test";
+import type { BrowserContext, Page, ElementHandle } from "@playwright/test";
+import type { WorkflowStep } from '@web-agent/protocol';
 import type { SafetyPolicy } from "@web-agent/safety";
 
 export interface RunContext {
+  validateTarget?: (step: WorkflowStep, element: ElementHandle) => Promise<void>;
   currentPage: Page;
   recordingStartPage?:Page;
   existingPages?:Page[];

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import {createHmac} from 'node:crypto';
 import {runAgentCli} from './agent/cli.js';
 import {productionProvider} from './agent/index.js';
+import {digest} from './agent/store.js';
 import { saveWorkflow } from '@web-agent/workflow-builder/persistence';
 import type { Workflow } from '@web-agent/protocol';
 import { executeStoredRun } from '@web-agent/runner/production';
@@ -156,16 +157,21 @@ it('rejects unused account workflow before replay registration',async()=>{
  await expect(registerSkill(root,manifest(),{confirm:true,variables:{accountId:'10001'}})).rejects.toThrow(/account/i);
  expect(run).not.toHaveBeenCalled();
 });
-it('rejects old signed skill contracts before enable or execute; never silently upgrades',async()=>{
+it.each([undefined,2])('rejects old signed skill contract %s before enable or execute; never silently upgrades',async(version)=>{
  await seed();const planned=await planTask(root,'查询账户10001表格',{provider:provider(reply())});
  const path=join(root,'data/agent/skills/query.json'),envelope=JSON.parse(await readFile(path,'utf8'));
  // Deliberate old-format fixture, signed with this isolated test account's key.
- delete envelope.payload.contractVersion;
+ if(version===undefined)delete envelope.payload.contractVersion;else envelope.payload.contractVersion=version;
  envelope.mac=createHmac('sha256',await readFile(join(root,'data/agent/.key'))).update(JSON.stringify(envelope.payload)).digest('hex');
  await writeFile(path,JSON.stringify(envelope));run.mockClear();
+ // A genuine old activation matches the old skill hash; do not rely on a stale MAC/hash to reject it.
+ const enabledPath=join(root,'data/agent/enabled/query.json'),enabled=JSON.parse(await readFile(enabledPath,'utf8'));
+ enabled.payload.skillHash=digest(envelope.payload);
+ enabled.mac=createHmac('sha256',await readFile(join(root,'data/agent/.key'))).update(JSON.stringify(enabled.payload)).digest('hex');
+ await writeFile(enabledPath,JSON.stringify(enabled));
  await expect(enableSkill(root,'query',true)).rejects.toThrow(/register/i);
- await expect(executePlan(root,(planned as any).plan.id,{confirm:true})).rejects.toThrow();
- expect(run).not.toHaveBeenCalled();expect(JSON.parse(await readFile(path,'utf8')).payload.contractVersion).toBeUndefined();
+ await expect(executePlan(root,(planned as any).plan.id,{confirm:true})).rejects.toThrow(/register/i);
+ expect(run).not.toHaveBeenCalled();expect(JSON.parse(await readFile(path,'utf8')).payload.contractVersion).toBe(version);
 });
 it('does not fall back to real Codex when explicit test mode has no double',()=>{
  vi.stubEnv('WEB_AGENT_PLANNER_TEST_MODE','1');vi.stubEnv('WEB_AGENT_PLANNER_TEST_COMMAND','');

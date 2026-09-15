@@ -16,11 +16,14 @@ async function cli(root:string,args:string[],decision?:unknown){
   child.stdout.on('data',x=>stdout+=x);child.stderr.on('data',x=>stderr+=x);child.on('error',reject);child.on('close',code=>{clearTimeout(timer);done({code,stdout,stderr});});
  });
 }
-test('real fixture account identity and text evidence survive all persistence/CLI boundaries',async({},info)=>{
+for(const group of ['baseline','parentheses']) test(`real fixture account identity and text evidence survive all persistence/CLI boundaries: ${group}`,async({},info)=>{
  test.setTimeout(180000);
  const root=await mkdtemp(join(tmpdir(),'agent-fix-browser-'));
  const secret='REREVIEW%2FURL-SECRET',abs=`http://demo:${secret}@127.0.0.1:9/rta`;
- const variants=[`\u0000[${abs}](${abs})`,`\u0001//demo:${secret}\\@fixture.test/rta`,`before https://demo:REREVIEW\t%2FURL-SECRET@fixture.test/rta after`];
+ const variants=[`\u0000[${abs}](${abs})`,`\u0001//demo:${secret}\\@fixture.test/rta`,`before https://demo:REREVIEW\t%2FURL-SECRET@fixture.test/rta after`,
+  'before https://demo:(RECHECK-9276-PRIVATE)@fixture.test/rta after',
+  '[link](//demo:pre(RECHECK-9276-PRIVATE)tail@fixture.test/rta)',
+  'http%3A%2F%2Fdemo%3A(RECHECK-9276-PRIVATE)%40fixture.test%2Frta'];
  let mode='correct',text='normal-title';
  const server=createServer((_req,res)=>{
   res.setHeader('Content-Type','text/html; charset=utf-8');
@@ -56,15 +59,18 @@ test('real fixture account identity and text evidence survive all persistence/CL
  try{
   await seed('query',true);await seed('title',false);await seed('strict-title',false,true);
   const observations:unknown[]=[];
-  for(const id of ['10001','20002']){const {outcome,execution}=await execute('query',id);expect(execution.code).toBe(0);expect(outcome.status).toBe('success');expect(outcome.result.outputs.results.rows[0][1]).toBe(`账户 ${id} 策略 001`);observations.push({account:id,status:outcome.status});}
-  for(const invalid of ['default','wrong','missing']){mode=invalid;const {outcome,execution}=await execute('query','30003');expect(execution.code).toBe(2);expect(outcome).toMatchObject({status:'failed',result:{status:'success'},taskValidation:{accountIdentity:'failed'}});observations.push({mode:invalid,status:outcome.status,runnerStatus:outcome.result.status});}
+  if(group==='baseline'){
+   for(const id of ['10001','20002','73142']){const {outcome,execution}=await execute('query',id);expect(execution.code).toBe(0);expect(outcome.status).toBe('success');expect(outcome.result.outputs.results.rows[0][1]).toBe(`账户 ${id} 策略 001`);observations.push({account:id,status:outcome.status});}
+   for(const invalid of ['default','wrong','missing']){mode=invalid;const {outcome,execution}=await execute('query','30003');expect(execution.code).toBe(2);expect(outcome).toMatchObject({status:'failed',result:{status:'success'},taskValidation:{accountIdentity:'failed'}});observations.push({mode:invalid,status:outcome.status,runnerStatus:outcome.result.status});}
+  }
   mode='correct';
-  for(const variant of variants){text=variant;
+  for(const variant of group==='baseline'?variants.slice(0,3):variants.slice(3)){text=variant;
    for(const [id,account] of [['title',undefined],['query','40004']] as const){const {outcome,execution}=await execute(id,account);expect(execution.code).toBe(0);expect(outcome.status).toBe('success');if(account){expect(outcome.result.outputs.results.rows).toHaveLength(1);expect(outcome.result.outputs.results.rows[0]).toHaveLength(3);}}
   }
-  text=variants[0];const failure=await execute('strict-title');expect(failure.execution.code).toBe(2);expect(failure.outcome.result.status).toBe('failed');
+  if(group==='parentheses'){mode='wrong';text=variants[3];const combined=await execute('query','73142');expect(combined.execution.code).toBe(2);expect(combined.outcome).toMatchObject({status:'failed',result:{status:'success'},taskValidation:{accountIdentity:'failed'}});}
+  text=variants[group==='baseline'?0:3];const failure=await execute('strict-title');expect(failure.execution.code).toBe(2);expect(failure.outcome.result.status).toBe('failed');
   const snapshot=join(root,'data/failures',failure.outcome.result.runId,'check/workflow.snapshot.json');expect(JSON.parse(await readFile(snapshot,'utf8')).id).toBe('strict-title');
-  let checked=0;async function scan(dir:string):Promise<void>{for(const e of await readdir(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())await scan(p);else{const value=await readFile(p,'utf8');for(const marker of ['REREVIEW/URL-SECRET',secret,encodeURIComponent(secret)])expect(value.toLowerCase(),p).not.toContain(marker.toLowerCase());checked++;}}}
+  let checked=0;async function scan(dir:string):Promise<void>{for(const e of await readdir(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())await scan(p);else{const value=await readFile(p,'utf8');for(const marker of ['REREVIEW/URL-SECRET',secret,encodeURIComponent(secret),'RECHECK','9276-PRIVATE','PRIVATE'])expect(value.toLowerCase(),p).not.toContain(marker.toLowerCase());checked++;}}}
   await scan(join(root,'data/runs'));await scan(join(root,'data/agent/results'));await scan(join(root,'data/failures'));await scan(info.outputDir);
   await writeFile(info.outputPath('summary.json'),JSON.stringify({observations,checkedFiles:checked,realModelRequests:0,planner:'explicit test double',failureSnapshotRead:true}));
  }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));await rm(root,{recursive:true,force:true});}

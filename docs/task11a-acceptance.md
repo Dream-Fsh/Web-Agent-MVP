@@ -1,5 +1,13 @@
 # Task 11A: local Agent dispatch experiment
 
+## 2026-09-15 supplemental fixes — pending independent rereview
+
+Parenthesized URL userinfo is consumed before prose delimiters. The cumulative `npm run test:safety-regressions` entry retains earlier C0, encoded URL, legacy persistence and free-text cases. Browser coverage includes extracted text/table cells, persisted Runner and Agent results, CLI output, required-assertion failure snapshots, and wrong-account results containing synthetic credentials.
+
+Account contract v3 adds a generic Runner validation hook on a pinned selected DOM node, used both by registration replay and execution. Fixture rules remain in the Agent: unique account input, query button and result table. Multiple candidates may resolve to the same valid element; score, priority, order, fallback or ambiguity cannot substitute an unrelated element. Old account contracts require new registration and explicit enable. Dashboard v2 and the independently reviewed runtime identity/diagnostic checks remain unchanged.
+
+Tests `account-target.e2e.spec.ts` and `pinned-target.e2e.spec.ts` cover registration decoys, execution drift and replacement after validation; `agent-fixes.e2e.spec.ts` retains actual three-account/title and combined failure evidence. All planning tests use explicit doubles; no production planner/provider/auth/retry configuration is changed. Production planning remains blocked and no real model end-to-end validation or merge authorization is claimed.
+
 ## Baseline and prerequisites
 
 - Requested and fetched Task 10 base: `40bf3df3f6a7066b321b4c1e0dfbe2d6906fe843`; includes Task 09 `c1e6bb3cc538dc1e5458198fa82cd1b24ca0d2ed` and Task 10 `7acd39f` normally. No newer remote Task 10 commits at preflight.

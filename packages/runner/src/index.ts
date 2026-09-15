@@ -4,7 +4,8 @@ import type { Page } from "@playwright/test";
 import { parseWorkflow, type Workflow, type WorkflowStep } from "@web-agent/protocol";
 import { assertStepAllowed, type SafetyPolicy } from "@web-agent/safety";
 import { evaluateAssertions, type Assertion } from "@web-agent/assertions";
-import { extractAttribute, extractCount, extractList, extractText, extractTable } from "@web-agent/extractor";
+import { extractAttribute, extractCount, extractList, extractText, extractTable, extractResolvedTable } from "@web-agent/extractor";
+import {withValidatedTarget} from './validated-target.js';
 import { executeClick } from "./click.js";
 import { executeDownload } from "./download.js";
 import { executeInput } from "./input.js";
@@ -15,7 +16,7 @@ import { executeWaitFor } from "./waitFor.js";
 import type { RunContext } from "./context.js";
 import { resolveWorkflowValue } from "./variables.js";
 
-export interface RunOptions { policy?: SafetyPolicy; variables?: RunContext["variables"]; runId?: string }
+export interface RunOptions { policy?: SafetyPolicy; variables?: RunContext["variables"]; runId?: string; validateTarget?:RunContext['validateTarget'] }
 export interface RunStepResult { id: string; type: WorkflowStep["type"]; status: "completed" | "failed" | "blocked"; message?: string }
 export interface RunResult { runId:string; workflowId:string; status:"success" | "failed" | "blocked"; steps:RunStepResult[]; outputs:Record<string, unknown>; downloads:string[]; startedAt:string; finishedAt:string }
 
@@ -24,6 +25,11 @@ async function executeExtract(context: RunContext, step: WorkflowStep): Promise<
   const operation = step.parameters?.operation;
   const key = step.parameters?.key;
   if (typeof operation !== "string" || typeof key !== "string") throw new Error("Extract steps require operation and key");
+  if(context.validateTarget){
+    if(operation!=='extractTable'&&operation!=='extractText')throw new Error('Validated extraction requires a single text or table target');
+    context.outputs[key]=await withValidatedTarget(context,step,async element=>operation==='extractTable'?extractResolvedTable(element):(await element.textContent())??'');
+    return;
+  }
   if (operation === "extractText") context.outputs[key] = await extractText(await stepScope(context,step), step.target);
   else if (operation === 'extractTable') context.outputs[key] = await extractTable(await stepScope(context,step), step.target);
   else if (operation === "extractAttribute") { const attribute = step.parameters?.attribute; if (typeof attribute !== "string") throw new Error("extractAttribute requires attribute"); context.outputs[key] = await extractAttribute(await stepScope(context,step), step.target, attribute); }
@@ -36,6 +42,7 @@ async function executeExtract(context: RunContext, step: WorkflowStep): Promise<
 export async function runWorkflow(page: Page, input: Workflow, options: RunOptions = {}): Promise<RunResult> {
   const workflow = parseWorkflow(input);
   const context: RunContext = { currentPage:page, recordingStartPage:page, recordingPages:[page], browserPages:page.context().pages(), recordingOwners:new Map(), existingPages:page.context().pages(), browserContext:page.context(), variables:options.variables ?? {}, outputs:{}, downloads:[], policy:options.policy ?? { mode:"read-only" }, runId:options.runId ?? crypto.randomUUID() };
+  context.validateTarget=options.validateTarget;
   const trackPage=(newPage:Page)=>{context.recordingPages!.push(newPage);context.browserPages!.push(newPage);context.recordingOwners!.set(newPage,newPage.opener());};
   context.browserContext.on('page',trackPage);
   const startedAt = new Date().toISOString();

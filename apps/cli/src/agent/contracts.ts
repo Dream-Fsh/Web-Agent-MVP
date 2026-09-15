@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Workflow, Target } from '@web-agent/protocol';
-import type { RunResult } from '@web-agent/runner';
+import type { RunResult, RunOptions } from '@web-agent/runner';
 import { assertStepAllowed, redactSensitiveData, redactWorkflow } from '@web-agent/safety';
 import { digest } from './store.js';
 
@@ -80,17 +80,40 @@ export function contract(workflow: Workflow, manifest: Manifest) {
     }
   }
   if (!outputs.length || !assertionIds.length) throw new Error('Extraction and required assertions are mandatory for skills');
-  return { contractVersion: 2 as const, variables: Object.fromEntries(names.map(name => [name, { type: 'string', format: 'numeric-id', required: true, sensitive: false }])),
+  return { contractVersion: manifest.purpose === 'account_table' ? 3 as const : 2 as const, variables: Object.fromEntries(names.map(name => [name, { type: 'string', format: 'numeric-id', required: true, sensitive: false }])),
     outputs, assertionIds, scope: { startUrl: workflow.startUrl, origin: url.origin, mode: 'read-only' as const, allowedOrigins: [] as string[], localOnly: true as const } };
 }
 export type Contract = ReturnType<typeof contract>;
 function fixtureTarget(target: Target | undefined, kind: 'account' | 'query' | 'table'): boolean {
+  // A declaration screen only. The replay's pinned DOM node is the proof below.
   return Boolean(target?.locators.some(locator => {
     const value = locator.value.replace(/'/g, '"');
     if (kind === 'account') return (locator.strategy === 'css' && /^(?:input)?\[name="?accountId"?\]$/.test(value)) || (locator.strategy === 'attribute' && value === 'name=accountId') || (locator.strategy === 'label' && value === '账户ID');
     if (kind === 'table') return locator.strategy === 'css' && value === 'table';
     return (locator.strategy === 'css' && value === 'button' && target.fingerprint.text === '查询') || (locator.strategy === 'text' && value === '查询') || (locator.strategy === 'role' && value === '查询' && target.fingerprint.role === 'button');
   }));
+}
+/** Local fixture contract only; Runner supplies and operates this exact DOM node. */
+export function fixtureTargetValidator(purpose:Manifest['purpose']):RunOptions['validateTarget']{
+  if(purpose!=='account_table')return undefined;
+  return async(step,element)=>{
+    const kind=step.type==='input'?'account':step.type==='extract'?'table':fixtureTarget(step.target,'query')?'query':'account';
+    const valid=await element.evaluate((node,expected)=>{
+      const doc=node.ownerDocument;
+      if(!doc||!node.isConnected||doc.defaultView!==doc.defaultView?.top)return false;
+      if(expected==='account'){
+        const matches=doc.querySelectorAll('input[name="accountId"]');
+        return matches.length===1&&matches[0]===node&&node instanceof HTMLInputElement&&!node.disabled&&!node.readOnly;
+      }
+      if(expected==='query'){
+        const matches=[...doc.querySelectorAll('button')].filter(button=>button.textContent?.trim()==='查询');
+        return matches.length===1&&matches[0]===node&&node instanceof HTMLButtonElement&&!node.disabled;
+      }
+      const matches=doc.querySelectorAll('table');
+      return matches.length===1&&matches[0]===node&&node instanceof HTMLTableElement;
+    },kind);
+    if(!valid)throw new Error('Account fixture actual target rejected; revalidate registration');
+  };
 }
 export function accountIdentityMatches(result: RunResult, spec: Contract, variables: Record<string, string>): boolean {
   if (!Object.hasOwn(spec.variables, 'accountId')) return true;

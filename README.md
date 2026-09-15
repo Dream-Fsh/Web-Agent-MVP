@@ -210,7 +210,8 @@ npx playwright test tests/agent-dispatch.e2e.spec.ts
 
 - 本地账户技能须先将 `{{accountId}}` 输入 fixture 的账户输入框，再点击查询，之后提取表格。仅在名称/描述声明变量、无关输入、未查询或查询后导航重置，不能登记。
 - 每个结果表必须包含 fixture 的三列表头及非空行；每行策略名称中的账户和策略 ID 必须与确认参数及该行 ID 对应。输入回显不是证据。验证失败返回 Agent `failed` / CLI 退出码 2，原始底层 RunResult（可能 success）保留，`taskValidation.accountIdentity` 明确失败，不改写账户。
-- 技能/计划固定 `contractVersion=2`。旧目录项不能静默升级，须新技能 ID、重新重放验证登记和明确启用；旧计划重新确认也不能绕过。
+- 账户技能/计划固定 `contractVersion=3`，标题技能保留版本 2。账户输入、查询按钮和提取表格由 Runner 的同一解析结果校验并操作（固定 DOM 节点，不重新定位）；候选描述本身不构成证明。旧账户目录项不能静默升级，须新技能 ID、重新重放验证登记和明确启用；旧计划重新确认也不能绕过。
+- 本地 fixture 目标须为唯一可用的 `input[name=accountId]`、唯一文字为“查询”的按钮及唯一 HTML table。存在歧义或回退至无关元素时拒绝；执行时重复此检查，返回账户身份核验仍独立保留。此契约不推广到真实站点。
 - 规划错误只传递固定分类、阶段、退出码和耗时，不输出原始 stderr。未知原因保持 unknown。历史一次真实调用失败的根因仍未确定；未改 provider、重试配置或认证路径。
 - 本地和 CI 自动化仅使用显式模型替身；测试模式缺少替身直接拒绝，CI preload 还阻止启动真实 Codex。普通录制仍是“开始 → 操作 → 停止 → 保存”，不要求标注或生成 Workflow。
 - [本轮修复与证据说明](docs/task11a-independent-fixes.md)。P1-3 不在自检中宣布独立关闭。
