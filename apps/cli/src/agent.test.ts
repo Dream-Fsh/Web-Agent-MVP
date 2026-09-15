@@ -2,6 +2,9 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { mkdtemp, readFile, writeFile, rm, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import {createHmac} from 'node:crypto';
+import {runAgentCli} from './agent/cli.js';
+import {productionProvider} from './agent/index.js';
 import { saveWorkflow } from '@web-agent/workflow-builder/persistence';
 import type { Workflow } from '@web-agent/protocol';
 import { executeStoredRun } from '@web-agent/runner/production';
@@ -16,7 +19,7 @@ function workflow(id = 'query', purpose = 'account_table'): Workflow {
   return { schemaVersion: '1.0', id, version: 1, name: id, startUrl: 'http://127.0.0.1:4318/' + (purpose === 'account_table' ? 'rta' : 'dashboard'),
     variables: purpose === 'account_table' ? { accountId: { required: true, sensitive: false } } : {},
     steps: [
-      ...(purpose === 'account_table' ? [{ id: 'input', type: 'input' as const, target: target('input[name="accountId"]'), parameters: { value: '{{accountId}}' } }] : []),
+      ...(purpose === 'account_table' ? [{ id: 'input', type: 'input' as const, target: target('input[name="accountId"]'), parameters: { value: '{{accountId}}' } }, { id: 'query', type: 'click' as const, target: { ...target('button'), fingerprint: { text: '查询' } } }] : []),
       { id: 'extract', type: 'extract', target: target(purpose === 'account_table' ? 'table' : 'h1'), parameters: { operation: purpose === 'account_table' ? 'extractTable' : 'extractText', key: 'results' } },
       { id: 'assert', type: 'assert', parameters: { assertions: [{ id: 'required', type: 'assertVisible', target: target('h1'), required: true }] } },
     ], metadata: { createdAt: '2026-09-14T00:00:00.000Z', updatedAt: '2026-09-14T00:00:00.000Z' } };
@@ -31,9 +34,9 @@ async function seed(id = 'query', purpose = 'account_table') {
 }
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'agent-unit-'));
-  run.mockReset(); run.mockImplementation(async w => ({ runId: crypto.randomUUID(), workflowId: w.id, status: 'success', steps: w.steps.map(s => ({ id: s.id, type: s.type, status: 'completed' })), outputs: { results: { rows: [['10001']] }, assert: { success: true, results: [{ id: 'required', required: true, status: 'passed' }] } }, downloads: [], startedAt: new Date().toISOString(), finishedAt: new Date().toISOString() }));
+  run.mockReset(); run.mockImplementation(async (w, options) => ({ runId: crypto.randomUUID(), workflowId: w.id, status: 'success', steps: w.steps.map(s => ({ id: s.id, type: s.type, status: 'completed' })), outputs: { results: { headers: ['策略ID','策略名称','状态'], rows: [['RTA001',`账户 ${options?.variables?.accountId} 策略 001`,'生效中']] }, assert: { success: true, results: [{ id: 'required', required: true, status: 'passed' }] } }, downloads: [], startedAt: new Date().toISOString(), finishedAt: new Date().toISOString() }));
 });
-afterEach(async () => { await rm(root, { recursive: true, force: true }); });
+afterEach(async () => { vi.unstubAllEnvs(); await rm(root, { recursive: true, force: true }); });
 
 it('requires explicit replay validation and enablement; raw logs are not skills', async () => {
   await saveWorkflow(workflow(), join(root, 'workflows'));
@@ -145,4 +148,34 @@ it('an already cancelled execution performs no browser operations', async () => 
   const abort = new AbortController(); abort.abort();
   await expect(executePlan(root, (planned as any).plan.id, { confirm: true, signal: abort.signal })).rejects.toThrow();
   expect(run).not.toHaveBeenCalled();
+});
+
+it('rejects unused account workflow before replay registration',async()=>{
+ const w=workflow();w.steps=w.steps.filter(s=>s.type!=='input');
+ await saveWorkflow(w,join(root,'workflows'));
+ await expect(registerSkill(root,manifest(),{confirm:true,variables:{accountId:'10001'}})).rejects.toThrow(/account/i);
+ expect(run).not.toHaveBeenCalled();
+});
+it('rejects old signed skill contracts before enable or execute; never silently upgrades',async()=>{
+ await seed();const planned=await planTask(root,'查询账户10001表格',{provider:provider(reply())});
+ const path=join(root,'data/agent/skills/query.json'),envelope=JSON.parse(await readFile(path,'utf8'));
+ // Deliberate old-format fixture, signed with this isolated test account's key.
+ delete envelope.payload.contractVersion;
+ envelope.mac=createHmac('sha256',await readFile(join(root,'data/agent/.key'))).update(JSON.stringify(envelope.payload)).digest('hex');
+ await writeFile(path,JSON.stringify(envelope));run.mockClear();
+ await expect(enableSkill(root,'query',true)).rejects.toThrow(/register/i);
+ await expect(executePlan(root,(planned as any).plan.id,{confirm:true})).rejects.toThrow();
+ expect(run).not.toHaveBeenCalled();expect(JSON.parse(await readFile(path,'utf8')).payload.contractVersion).toBeUndefined();
+});
+it('does not fall back to real Codex when explicit test mode has no double',()=>{
+ vi.stubEnv('WEB_AGENT_PLANNER_TEST_MODE','1');vi.stubEnv('WEB_AGENT_PLANNER_TEST_COMMAND','');
+ expect(()=>productionProvider()).toThrow(/no real fallback/);
+});
+it.each([['configuration_rejected',"process.stderr.write('reserved provider cannot be overridden token=SYNTHETIC_SECRET');process.exit(7)"],['unknown',"process.stderr.write('SYNTHETIC_SECRET');process.exit(9)"],['invalid_output',"console.log('SYNTHETIC_SECRET')"]])('passes safe %s diagnostics through Agent CLI without browser execution',async(category,code)=>{
+ await seed();run.mockClear();
+ vi.stubEnv('WEB_AGENT_PLANNER_TEST_MODE','1');vi.stubEnv('WEB_AGENT_PLANNER_TEST_COMMAND',JSON.stringify([process.execPath,'-e',code,'--']));
+ const onExitCode=vi.fn();
+ const output=await runAgentCli(['agent','plan','查询账户10001表格'],{root,onExitCode});
+ expect(JSON.parse(output)).toMatchObject({status:'failed',diagnostic:{category}});
+ expect(output).not.toContain('SYNTHETIC_SECRET');expect(onExitCode).toHaveBeenCalledWith(2);expect(run).not.toHaveBeenCalled();
 });

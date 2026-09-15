@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Workflow } from '@web-agent/protocol';
+import type { Workflow, Target } from '@web-agent/protocol';
 import type { RunResult } from '@web-agent/runner';
 import { assertStepAllowed, redactSensitiveData, redactWorkflow } from '@web-agent/safety';
 import { digest } from './store.js';
@@ -39,12 +39,30 @@ export function contract(workflow: Workflow, manifest: Manifest) {
   }
   const outputs: { key: string; operation: string }[] = [];
   const assertionIds: string[] = [];
+  let accountFilled = false, queried = false;
   if (!workflow.steps.length || workflow.steps.length > 100) throw new Error('Unsupported workflow size');
   for (const step of workflow.steps) {
     assertStepAllowed(step, { mode: 'read-only', allowedOrigins: [] }, workflow.startUrl);
     if (step.type === 'download') throw new Error('Downloads are outside this experiment');
     if (step.url && step.url !== workflow.startUrl) throw new Error('Workflow leaves registered fixture route');
     if (step.type === 'input' && step.parameters?.value !== '{{accountId}}') throw new Error('Inputs must use the declared parameter');
+    if (manifest.purpose === 'account_table') {
+      // This is deliberately the top-level local fixture contract, not general
+      // business inference from names/descriptions or a model's explanation.
+      const frame = step.parameters?.frame as { frameId?: number; framePath?: unknown[] } | undefined;
+      if (frame && (frame.frameId !== 0 || !Array.isArray(frame.framePath) || frame.framePath.length)) throw new Error('Account query requires the top-level fixture');
+      if (step.type === 'navigate' || step.type === 'switchTab') { accountFilled = false; queried = false; }
+      if (step.type === 'input') {
+        if (!fixtureTarget(step.target, 'account')) throw new Error('Account parameter must target the query account input');
+        accountFilled = true; queried = false;
+      }
+      if (step.type === 'click') {
+        if (fixtureTarget(step.target, 'query')) { queried = accountFilled; }
+        else if (!fixtureTarget(step.target, 'account')) { accountFilled = false; queried = false; }
+      }
+      if (step.type === 'select') { accountFilled = false; queried = false; }
+      if (step.type === 'extract' && (!queried || !fixtureTarget(step.target, 'table'))) throw new Error('Account query parameter is not consumed before result extraction');
+    }
     if (step.type === 'extract') {
       const { key, operation } = step.parameters ?? {};
       if (typeof key !== 'string' || !idSchema.safeParse(key).success || !cleanText(key, 128) ||
@@ -62,12 +80,31 @@ export function contract(workflow: Workflow, manifest: Manifest) {
     }
   }
   if (!outputs.length || !assertionIds.length) throw new Error('Extraction and required assertions are mandatory for skills');
-  return { variables: Object.fromEntries(names.map(name => [name, { type: 'string', format: 'numeric-id', required: true, sensitive: false }])),
+  return { contractVersion: 2 as const, variables: Object.fromEntries(names.map(name => [name, { type: 'string', format: 'numeric-id', required: true, sensitive: false }])),
     outputs, assertionIds, scope: { startUrl: workflow.startUrl, origin: url.origin, mode: 'read-only' as const, allowedOrigins: [] as string[], localOnly: true as const } };
 }
 export type Contract = ReturnType<typeof contract>;
-export function successful(result: RunResult, spec: Contract): boolean {
+function fixtureTarget(target: Target | undefined, kind: 'account' | 'query' | 'table'): boolean {
+  return Boolean(target?.locators.some(locator => {
+    const value = locator.value.replace(/'/g, '"');
+    if (kind === 'account') return (locator.strategy === 'css' && /^(?:input)?\[name="?accountId"?\]$/.test(value)) || (locator.strategy === 'attribute' && value === 'name=accountId') || (locator.strategy === 'label' && value === '账户ID');
+    if (kind === 'table') return locator.strategy === 'css' && value === 'table';
+    return (locator.strategy === 'css' && value === 'button' && target.fingerprint.text === '查询') || (locator.strategy === 'text' && value === '查询') || (locator.strategy === 'role' && value === '查询' && target.fingerprint.role === 'button');
+  }));
+}
+export function accountIdentityMatches(result: RunResult, spec: Contract, variables: Record<string, string>): boolean {
+  if (!Object.hasOwn(spec.variables, 'accountId')) return true;
+  const id = variables.accountId;
+  if (!id || !/^[0-9]{1,12}$/.test(id)) return false;
+  return spec.outputs.every(({key}) => {
+    const table = result.outputs[key] as {headers?: unknown; rows?: unknown} | undefined;
+    if (!table || JSON.stringify(table.headers) !== JSON.stringify(['策略ID','策略名称','状态']) || !Array.isArray(table.rows) || !table.rows.length) return false;
+    return table.rows.every(row => Array.isArray(row) && row.length === 3 && typeof row[0] === 'string' && /^RTA\d{3}$/.test(row[0]) && row[1] === `账户 ${id} 策略 ${row[0].slice(3)}`);
+  });
+}
+export function successful(result: RunResult, spec: Contract, variables: Record<string, string> = {}): boolean {
   if (result.status !== 'success') return false;
+  if (!accountIdentityMatches(result, spec, variables)) return false;
   return spec.outputs.every(output => Object.hasOwn(result.outputs, output.key)) &&
     spec.assertionIds.every(pair => {
       const slash = pair.indexOf('/'), stepId = pair.slice(0, slash), assertionId = pair.slice(slash + 1);

@@ -4,8 +4,8 @@ import { createHash } from 'node:crypto';
 import { parseWorkflow, type Workflow } from '@web-agent/protocol';
 import { executeStoredRun } from '@web-agent/runner/production';
 import { redactSensitiveData } from '@web-agent/safety';
-import { requestTaskPlan, taskDecisionSchema } from '@web-agent/codex-adapter/planner';
-import { contract, bindings, manifestSchema, safeGoal, successful, type Manifest, type Contract } from './contracts.js';
+import { requestTaskPlan, taskDecisionSchema, safePlannerError } from '@web-agent/codex-adapter/planner';
+import { contract, bindings, manifestSchema, safeGoal, successful, accountIdentityMatches, type Manifest, type Contract } from './contracts.js';
 import { digest, identifier, locked, publish, readSealed, exists, ids, readJson } from './store.js';
 
 type Skill = Manifest & Contract & { workflowHash: string; validation: { runId: string; at: string; workflowHash: string } };
@@ -41,7 +41,7 @@ async function skillAt(root: string, id: string, enabled = true) {
   const content = await frozen(root, skill.workflowId, skill.version);
   const spec = contract(content.workflow, skill);
   if (content.hash !== skill.workflowHash || skill.validation.workflowHash !== content.hash ||
-    digest(spec) !== digest({ variables: skill.variables, outputs: skill.outputs, assertionIds: skill.assertionIds, scope: skill.scope })) throw new Error('Skill workflow or scope changed; register and confirm again');
+    digest(spec) !== digest({ contractVersion: skill.contractVersion, variables: skill.variables, outputs: skill.outputs, assertionIds: skill.assertionIds, scope: skill.scope })) throw new Error('Skill workflow or scope changed; register and confirm again');
   return { skill, workflow: content.workflow };
 }
 export async function registerSkill(root: string, input: unknown, options: Options = {}) {
@@ -57,7 +57,7 @@ export async function registerSkill(root: string, input: unknown, options: Optio
     const variables = bindings(content.workflow, options.variables);
     if (Object.keys(spec.variables).some(name => !Object.hasOwn(variables, name))) throw new Error('Required parameter missing for validation');
     const result = await executeStoredRun(content.workflow, { root, variables, localOnly: true, headless: options.headless, signal: options.signal });
-    if (!successful(result, spec)) throw new Error('Local replay validation failed; inspect data/runs and data/failures');
+    if (!successful(result, spec, variables)) throw new Error('Local replay validation failed; inspect data/runs and data/failures');
     if ((await frozen(root, manifest.workflowId, manifest.version)).hash !== content.hash) throw new Error('Workflow changed during validation');
     const skill: Skill = { ...manifest, ...spec, workflowHash: content.hash, validation: { runId: result.runId, at: new Date().toISOString(), workflowHash: content.hash } };
     await publish(root, 'skills', manifest.id, skill);
@@ -101,6 +101,7 @@ export function productionProvider(): Provider {
     if (!Array.isArray(command) || !command.length || !command.every(s => typeof s === 'string' && s.length > 0)) throw new Error('Invalid test provider configuration');
     return { kind: 'test-double', request: (input, options) => requestTaskPlan(input, { command, signal: options?.signal }) };
   }
+  if (process.env.WEB_AGENT_PLANNER_TEST_MODE === '1') throw new Error('Explicit planner test command required; no real fallback');
   return { kind: 'codex', request: (input, options) => requestTaskPlan(input, { signal: options?.signal }) };
 }
 export async function planTask(root: string, task: string, options: Options & { provider?: Provider; skillId?: string } = {}) {
@@ -115,8 +116,9 @@ export async function planTask(root: string, task: string, options: Options & { 
   const provider = options.provider ?? productionProvider();
   const publicSkills = candidates.map(s => ({ id: s.id, name: s.name, description: s.description, purpose: s.purpose, version: s.version, variables: s.variables, outputs: s.outputs }));
   let response: unknown;
+  const planningStarted = Date.now();
   try { response = await provider.request({ task, suppliedParameters: variables, selectedSkillId: options.skillId ?? null, skills: publicSkills }, { signal: options.signal }); }
-  catch { throw new Error(options.signal?.aborted ? 'Planner cancelled' : 'Planner failed; model unavailable, timed out, or invalid output'); }
+  catch (error) { throw safePlannerError(error, Date.now() - planningStarted, options.signal?.aborted); }
   options.signal?.throwIfAborted();
   const parsed = taskDecisionSchema.safeParse(response);
   if (!parsed.success || digest(redactSensitiveData(response)) !== digest(response)) throw new Error('Planner schema rejected');
@@ -156,7 +158,7 @@ export async function planTask(root: string, task: string, options: Options & { 
     if (digest(latest.skill) !== digest(registered)) throw new Error('Skill changed during planning');
     const now = (options.now ?? Date.now)();
     const plan: DisplayPlan = { id: crypto.randomUUID(), skillId: skill.id, skillHash: digest(latest.skill), workflowId: skill.workflowId, version: skill.version,
-      workflowHash: skill.workflowHash, variables: bound, variableDefinitions: skill.variables, bindings: bound, outputs: skill.outputs, assertionIds: skill.assertionIds, scope: skill.scope,
+      workflowHash: skill.workflowHash, contractVersion: skill.contractVersion, variables: bound, variableDefinitions: skill.variables, bindings: bound, outputs: skill.outputs, assertionIds: skill.assertionIds, scope: skill.scope,
       createdAt: now, expiresAt: now + 15 * 60 * 1000, taskDigest: digest(task), modelKind: provider.kind };
     await publish(root, 'plans', plan.id, plan);
     return { status: 'ready', plan, message: '这是执行计划，不是任务结果；请检查后明确确认。' };
@@ -173,7 +175,7 @@ export async function executePlan(root: string, id: string, options: Options = {
     if (plan.id !== id || plan.expiresAt <= (options.now ?? Date.now)() || plan.createdAt > (options.now ?? Date.now)()) throw new Error('Plan expired; re-plan and confirm');
     if (await exists(root, 'used', id)) throw new Error('Plan already used or cancelled; no repeat execution');
     const { skill, workflow } = await skillAt(root, plan.skillId);
-    if (digest(skill) !== plan.skillHash || skill.workflowHash !== plan.workflowHash || skill.workflowId !== plan.workflowId || skill.version !== plan.version ||
+    if (digest(skill) !== plan.skillHash || skill.contractVersion !== plan.contractVersion || skill.workflowHash !== plan.workflowHash || skill.workflowId !== plan.workflowId || skill.version !== plan.version ||
       digest(skill.scope) !== digest(plan.scope) || digest(plan.bindings) !== digest(plan.variables) || digest(skill.outputs) !== digest(plan.outputs) ||
       digest(skill.assertionIds) !== digest(plan.assertionIds)) throw new Error('Plan scope/content changed; re-plan and confirm');
     const variables = bindings(workflow, plan.variables);
@@ -183,8 +185,9 @@ export async function executePlan(root: string, id: string, options: Options = {
     await publish(root, 'used', id, { status: 'executing', at: Date.now() });
     try {
       const result = await executeStoredRun(workflow, { root, variables, localOnly: true, headless: options.headless, signal: options.signal });
-      const status = result.status === 'success' && !successful(result, skill) ? 'failed' : result.status;
-      const outcome = redactSensitiveData({ status, planId: id, modelKind: plan.modelKind, result, evidence: { run: 'data/runs/' + result.runId + '.json', failure: status === 'success' ? null : 'data/failures/' + result.runId } });
+      const accountIdentity = accountIdentityMatches(result, skill, variables);
+      const status = result.status === 'success' && !successful(result, skill, variables) ? 'failed' : result.status;
+      const outcome = redactSensitiveData({ status, planId: id, modelKind: plan.modelKind, taskValidation: { accountIdentity: Object.hasOwn(skill.variables, 'accountId') ? (accountIdentity ? 'passed' : 'failed') : 'not_applicable' }, result, evidence: { run: 'data/runs/' + result.runId + '.json', failure: result.status === 'success' ? null : 'data/failures/' + result.runId } });
       await publish(root, 'results', id, outcome);
       return outcome;
     } catch {

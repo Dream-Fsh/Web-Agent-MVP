@@ -175,7 +175,9 @@ npm exec -- web-agent agent execute <planId> --confirm --headless
 npm exec -- web-agent agent result <planId>
 ```
 
-plan 默认调用本机已认证的真实 Codex CLI 一次，仅发送脱敏合成/用户任务文字及必要技能描述，不发送 Workflow 步骤、DOM、截图、profile 或录制。需要当前 Codex CLI 支持 ephemeral、ignore-user-config、ignore-rules 和 output-schema。规划不是执行：不会打开浏览器。ready 计划展示固定版本、参数、目标站点、输出和确认范围；只有显式 execute --confirm 才调用现有 Runner。
+**生产规划当前阻塞，不要运行上面的真实 plan 或下面的真实 smoke。** CLI 0.147.0 拒绝当前内置 provider 的重试配置；本轮冻结这些参数，不接入候选 provider。一次子进程不证明底层无重试，真实模型全链路未验证。账户 90009 的下一次请求预览保留，需修复复审后另行授权。
+
+plan 的生产路径设计为调用真实 Codex，仅发送脱敏任务文字及必要技能描述，不发送 Workflow 步骤、DOM、截图、profile 或录制。规划不是执行：不会打开浏览器。ready 计划展示固定版本、参数、目标站点、输出和确认范围；只有显式 execute --confirm 才调用现有 Runner。
 
 缺少参数、候选不唯一或不匹配时不会执行。补充参数或指定候选后重新规划（这是另一次模型调用）：
 
@@ -203,6 +205,15 @@ npx playwright test tests/agent-dispatch.e2e.spec.ts
 生产无模型可用、鉴权失败、超时或结构非法都会失败，不静默降级固定答案。测试替身须同时显式设置 WEB_AGENT_PLANNER_TEST_MODE=1 和 WEB_AGENT_PLANNER_TEST_COMMAND，计划会标记 test-double；正常使用不要设置。
 
 ## 验收证据
+
+### Task 11A 独立修复（最终 SHA 待定向复审）
+
+- 本地账户技能须先将 `{{accountId}}` 输入 fixture 的账户输入框，再点击查询，之后提取表格。仅在名称/描述声明变量、无关输入、未查询或查询后导航重置，不能登记。
+- 每个结果表必须包含 fixture 的三列表头及非空行；每行策略名称中的账户和策略 ID 必须与确认参数及该行 ID 对应。输入回显不是证据。验证失败返回 Agent `failed` / CLI 退出码 2，原始底层 RunResult（可能 success）保留，`taskValidation.accountIdentity` 明确失败，不改写账户。
+- 技能/计划固定 `contractVersion=2`。旧目录项不能静默升级，须新技能 ID、重新重放验证登记和明确启用；旧计划重新确认也不能绕过。
+- 规划错误只传递固定分类、阶段、退出码和耗时，不输出原始 stderr。未知原因保持 unknown。历史一次真实调用失败的根因仍未确定；未改 provider、重试配置或认证路径。
+- 本地和 CI 自动化仅使用显式模型替身；测试模式缺少替身直接拒绝，CI preload 还阻止启动真实 Codex。普通录制仍是“开始 → 操作 → 停止 → 保存”，不要求标注或生成 Workflow。
+- [本轮修复与证据说明](docs/task11a-independent-fixes.md)。P1-3 不在自检中宣布独立关闭。
 
 - [本轮 3 个 P1 阻塞项修复与回归证据](docs/p1-task10-fixes.md)：最终 SHA 待独立复审；两个 PR 均未合并。
 

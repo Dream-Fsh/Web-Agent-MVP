@@ -3,6 +3,7 @@ import { parseArguments } from '../arguments.js';
 import type { CliOptions } from '../index.js';
 import { registerSkill, enableSkill, disableSkill, listSkills, planTask, executePlan, cancelPlan, inspectAgentResult } from './index.js';
 import { readJson } from './store.js';
+import { PlannerError, safePlannerError } from '@web-agent/codex-adapter/planner';
 
 export async function runAgentCli(args: string[], options: CliOptions): Promise<string> {
   let parsed: ReturnType<typeof parseArguments>;
@@ -26,6 +27,13 @@ export async function runAgentCli(args: string[], options: CliOptions): Promise<
     else throw new Error('Invalid Agent command');
   } catch (error) {
     options.onExitCode?.(2);
+    if (error instanceof PlannerError) {
+      const safe = safePlannerError(error);
+      return JSON.stringify({ status: safe.diagnostic.category === 'cancelled' ? 'cancelled' : 'failed', message: safe.message, diagnostic: safe.diagnostic });
+    }
+    if (error instanceof Error && /^(Account |Skill workflow or scope changed)/.test(error.message)) {
+      return JSON.stringify({ status: 'failed', message: '技能契约无效或已过期；请重新验证登记并明确启用，不能仅重新规划。' });
+    }
     // Never print filesystem/JSON/model errors, which can contain task or secret bytes.
     const message = error instanceof Error && /^(Confirmation required|Plan already used|Plan expired|Planner failed|Planner cancelled|Skill disabled|Invalid non-sensitive parameter|Required parameter missing|Local replay validation failed|Unknown or disabled selected skill)/.test(error.message)
       ? error.message : 'Agent validation failed; no new execution authorized. Check local skill/plan/version and re-plan.';
