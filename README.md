@@ -172,3 +172,9 @@ npm exec -- web-agent recording recover
 - 虚拟表格不支持；OCR、Vision、Desktop automation 不在 V1 范围。
 - 真实站点自动 Repair promote 不支持；当前 CLI repair 限制在 loopback。首次真实修复必须人工 review。
 - 提供带审计的异常锁恢复，不承诺续录或所有文件系统的断电持久性；多上下文失败证据的完整覆盖尚未单独验收。
+
+### 通用文本 URL 脱敏补修（待独立复审）
+
+普通文本和表格单元格中的 HTTP(S)、协议相对 URL 及百分号编码 URL 外层使用统一候选清洗；Markdown 分隔不会跨链接吞并。支持 userinfo 的明文/百分号编码、C0 和 TAB/CR/LF 变体；歧义反斜线 authority 不输出原凭据。保留正常文本、表格结构及相对路径，不承诺识别无标签的任意秘密。
+
+回归覆盖 RawEvent、旧 Workflow 保存和 Failure Package 实际读盘。CI 使用 `scripts/no-real-model.cjs` 阻止规划/repair 回退到真实 Codex；模型测试必须提供显式替身。补修与自检不等于 P1-3 独立关闭。
