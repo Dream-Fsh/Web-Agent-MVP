@@ -12,7 +12,7 @@ const write = /保存|编辑|创建|修改预算|提交|启用|暂停广告|save
 
 function redactValue(value: unknown, key = ""): unknown {
   if (sensitiveKey.test(key)) return REDACTED;
-  if (urlKey.test(key) && typeof value === "string") return redactUrlText(redactUrl(value));
+  if (urlKey.test(key) && typeof value === "string") return redactUrl(redactUrlText(redactUrl(value)));
   if (typeof value === "string" && /(?:password|authorization|cookie|token|access_token|refresh_token)\s*[=:]/i.test(value)) return REDACTED;
   if (typeof value === 'string') return redactUrlText(value);
   if (Array.isArray(value)) return value.map((item) => redactValue(item));
