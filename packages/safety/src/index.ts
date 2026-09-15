@@ -12,9 +12,9 @@ const write = /保存|编辑|创建|修改预算|提交|启用|暂停广告|save
 
 function redactValue(value: unknown, key = ""): unknown {
   if (sensitiveKey.test(key)) return REDACTED;
-  if (urlKey.test(key) && typeof value === "string") return redactUrl(value);
+  if (urlKey.test(key) && typeof value === "string") return redactUrlText(redactUrl(value));
   if (typeof value === "string" && /(?:password|authorization|cookie|token|access_token|refresh_token)\s*[=:]/i.test(value)) return REDACTED;
-  if (typeof value === 'string') return value.replace(/https?:\/\/[^\s"'<>]+/gi, url => redactUrl(url));
+  if (typeof value === 'string') return redactUrlText(value);
   if (Array.isArray(value)) return value.map((item) => redactValue(item));
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([childKey, childValue]) => [childKey, redactValue(childValue, childKey)]));
   return value;
@@ -22,6 +22,31 @@ function redactValue(value: unknown, key = ""): unknown {
 
 /** Redacts structured diagnostic data before it can be persisted or exported. */
 export function redactSensitiveData<T>(value: T): T { return redactValue(value) as T; }
+
+/** URL candidates in prose have lexical boundaries, unlike a structured URL field.
+ * Include protocol-relative and percent-encoded URLs, but never span Markdown
+ * delimiters. TAB/CR/LF inside userinfo belong to the same candidate (WHATWG).
+ * Ambiguous backslash authorities fail closed instead of becoming secret paths.
+ */
+export function redactUrlText(text: string): string {
+  const candidates = /(?:https?(?::|%3a))?(?:[\/\\]|%2f|%5c){2}(?:[^ "'<>()[\]{}，。；\/]*@)?[^\s"'<>()[\]{}，。；]*/gi;
+  return text.replace(candidates, candidate => {
+    let value = candidate;
+    // Decode an encoded URL envelope, not arbitrary surrounding prose or paths.
+    for (let i = 0; i < 2 && /^(?:https?%3a|%2f%2f|%5c%5c)/i.test(value); i++) {
+      try { value = decodeURIComponent(value); } catch { return REDACTED; }
+    }
+    if (value.includes('@') && value.includes('\\')) return REDACTED;
+    const clean = redactUrl(value);
+    // Normal non-sensitive URLs retain their spelling; credential/query-bearing
+    // or malformed candidates always use the sanitized reconstruction.
+    try {
+      const parsed = new URL(value, 'https://redaction.invalid/');
+      if (!parsed.username && !parsed.password && !parsed.search && (!parsed.hash || /^#[A-Za-z0-9/_-]+$/.test(parsed.hash)) && !/[\u0000-\u001f\\]/.test(value) && clean !== REDACTED) return value;
+    } catch { return REDACTED; }
+    return clean;
+  });
+}
 
 /** Removes a URL query before URLs cross a persistence or diagnostic boundary. */
 export function redactUrl(value: string): string {
