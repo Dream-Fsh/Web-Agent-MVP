@@ -17,7 +17,8 @@
     "test": "node --test scripts/*.test.mjs && npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test:e2e": "npm run build && playwright test",
-    "verify": "npm run typecheck && npm test && npm run test:e2e"
+    "verify": "npm run typecheck && npm test && npm run test:e2e",
+    "test:safety-regressions": "npm run build && vitest run packages/safety/src/c0-regression.test.ts packages/safety/src/text-url-regression.test.ts packages/safety/src/parenthesis-regression.test.ts packages/recording-adapter/src/url-regression.test.ts packages/workflow-builder/src/c0-persistence.test.ts packages/workflow-builder/src/text-persistence.test.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
