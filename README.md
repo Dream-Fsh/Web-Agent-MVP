@@ -178,3 +178,5 @@ npm exec -- web-agent recording recover
 普通文本和表格单元格中的 HTTP(S)、协议相对 URL 及百分号编码 URL 外层使用统一候选清洗；Markdown 分隔不会跨链接吞并。支持 userinfo 的明文/百分号编码、C0 和 TAB/CR/LF 变体；歧义反斜线 authority 不输出原凭据。保留正常文本、表格结构及相对路径，不承诺识别无标签的任意秘密。
 
 回归覆盖 RawEvent、旧 Workflow 保存和 Failure Package 实际读盘。CI 使用 `scripts/no-real-model.cjs` 阻止规划/repair 回退到真实 Codex；模型测试必须提供显式替身。补修与自检不等于 P1-3 独立关闭。
+
+括号密码补修：候选识别先消费 authority 的 userinfo 和 `@`，再处理外部括号，避免把合法密码尾部当作普通文本。不能解析的可疑 URL 不回退原文。累计回归入口：`npm run test:safety-regressions`（包含历次 C0、文本、编码、括号及真实持久化断言）；真实浏览器仍包含在 `npm run verify`。本次最终版本仍需定向独立复审，不代表整体合并或真实模型放行。
