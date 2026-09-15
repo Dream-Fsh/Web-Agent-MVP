@@ -25,6 +25,8 @@ test('visible Extension demonstration automatically produces a replayable versio
     const page = await context.newPage();
     await page.goto(`${fixture.baseUrl}/rta`);
     const ui = page.locator('web-agent-recorder');
+    await ui.locator('summary').click();
+    await ui.locator('#generate-workflow').check();
     await expect(ui.locator('#capability')).toHaveCount(0);
     const worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
     const popup = await context.newPage();

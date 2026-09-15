@@ -13,7 +13,7 @@
   "scripts": {
     "build": "npm run build -w @web-agent/recorder-core && npm run bundle:content && npm run bundle:background",
     "bundle:content": "vite build --config vite.content.config.ts",
-    "bundle:background": "vite build --config vite.background.config.ts",
+    "bundle:background": "vite build --config vite.background.config.ts && node scripts/version-background.mjs",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests",
     "verify:extension": "node ./scripts/verify-build.mjs"

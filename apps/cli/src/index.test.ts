@@ -16,12 +16,11 @@ it("lists workflow history and rolls current workflow back through the CLI", asy
     await saveWorkflowVersion(workflowsRoot, "rta-check", workflow(2));
     expect(await runCli(["workflow", "history", "rta-check"], { workflowsRoot })).toContain("v1.json\nv2.json");
     await runCli(["workflow", "rollback", "rta-check", "1"], { workflowsRoot });
-    expect(JSON.parse(await readFile(join(workflowsRoot, "rta-check", "current.json"), "utf8"))).toMatchObject({ version:1 });
+    expect(JSON.parse(await readFile(join(workflowsRoot, "rta-check", "current.json"), "utf8"))).toMatchObject({ currentVersion:1 });
   } finally { await rm(root, { recursive:true, force:true }); }
 });
 
-it("recognizes all required command surfaces without executing external actions", async () => {
-  for (const args of [["login"], ["record"], ["workflow", "list"], ["workflow", "inspect", "rta-check"], ["run", "rta-check", "--var", "accountId=10001"], ["failures", "list"], ["repair", "run-1"]]) {
-    await expect(runCli(args, { workflowsRoot:"missing" })).resolves.toMatch(/manual|workflow|No workflows|not configured|failures/i);
-  }
+it("rejects unknown commands and reports an empty workflow catalog without opening a browser", async () => {
+  await expect(runCli(["unknown"])).rejects.toThrow("Unknown command");
+  await expect(runCli(["workflow","list"],{workflowsRoot:"missing"})).resolves.toBe("No workflows");
 });

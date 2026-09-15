@@ -1,1 +1,29 @@
-{"name":"@web-agent/codex-adapter","version":"0.1.0","private":true,"type":"module","main":"./dist/index.js","types":"./dist/index.d.ts","dependencies":{"@web-agent/protocol":"*","@web-agent/safety":"*","zod":"*"},"scripts":{"build":"npm run build -w @web-agent/safety && tsc --project tsconfig.json","typecheck":"tsc --project tsconfig.json --noEmit","test":"npm run build -w @web-agent/safety && vitest run --passWithNoTests"}}
+{
+  "name": "@web-agent/codex-adapter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "dependencies": {
+    "@web-agent/protocol": "*",
+    "@web-agent/safety": "*",
+    "zod": "*",
+    "@web-agent/workflow-builder": "*",
+    "@web-agent/runner": "*",
+    "@web-agent/failure": "*"
+  },
+  "scripts": {
+    "build": "npm run build -w @web-agent/workflow-builder && tsc --project tsconfig.json",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "test": "npm run build -w @web-agent/workflow-builder && vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "@web-agent/normalizer": "*"
+  },
+  "exports": {
+    "./production": "./dist/production.js",
+    ".": "./dist/index.js",
+    "./transport": "./dist/transport.js"
+  }
+}

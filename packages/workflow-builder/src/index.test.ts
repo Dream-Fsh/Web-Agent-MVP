@@ -51,3 +51,8 @@ it('rejects dangling references, duplicate variables, and unsupported actions', 
   expect(() => builder.buildWorkflow(actions, [variable(), { ...variable(), id: 'other' }], metadata)).toThrow(/variable/i);
   expect(() => builder.buildWorkflow([{ ...actions[0], type: 'upload' }], [], metadata)).toThrow(/unsupported/i);
 });
+
+it('builds native links with an implicit link role and a stable accessible name',()=>{
+  const event=parseRawEvent({...raw('link'),type:'click',value:undefined,element:{tag:'a',text:'查询新标签',accessibleName:'查询新标签',attributes:{href:'/rta',target:'_blank'},nearbyText:[],locatorCandidates:[]}});
+  expect(builder.buildWorkflow(normalizeEvents([event]),[],metadata).steps[0].target).toMatchObject({fingerprint:{role:'link'},locators:[{strategy:'role',value:'查询新标签'}]});
+});

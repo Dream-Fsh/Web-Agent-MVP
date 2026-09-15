@@ -9,7 +9,7 @@ export interface WorkflowBuildMetadata {
 
 function targetFor(element?: ElementSnapshot): Target {
   if (!element) throw new Error('Action requires an element target');
-  const role = element.role ?? (element.tag === 'button' ? 'button' : undefined);
+  const role = element.role ?? (element.tag === 'button' ? 'button' : element.tag==='a' && element.attributes.href ? 'link' : undefined);
   const name = element.label ?? element.ariaLabel ?? element.accessibleName ?? element.text ?? element.attributes.name;
   const locators = [...element.locatorCandidates];
   if (!locators.length) {
@@ -54,13 +54,15 @@ export function buildWorkflow(actions: NormalizedAction[], inputs: RecordingAnno
   const steps: WorkflowStep[] = [];
   const add = (step: Omit<WorkflowStep, 'id'>) => steps.push({ id: `step-${steps.length + 1}`, ...step });
   const addAnnotation = (annotation: RecordingAnnotation) => {
-    if (annotation.type === 'extraction') add({ type: 'extract', target: annotation.target, parameters: { operation: annotation.metadata.operation, key: annotation.metadata.key } });
-    if (annotation.type === 'requiredAssertion') add({ type: 'assert', parameters: { assertions: [{ id: annotation.id, type: annotation.metadata.assertionType, target: annotation.target, expected: annotation.metadata.expected, required: true }] } });
+    const frame=annotation.targetActionId?references.get(annotation.targetActionId)?.context.frame:undefined;
+    if (annotation.type === 'extraction') add({ type: 'extract', target: annotation.target, parameters: { frame, operation: annotation.metadata.operation, key: annotation.metadata.key } });
+    if (annotation.type === 'requiredAssertion') add({ type: 'assert', parameters: { frame, assertions: [{ id: annotation.id, type: annotation.metadata.assertionType, target: annotation.target, expected: annotation.metadata.expected, required: true }] } });
   };
   for (const action of [...actions].sort((a, b) => a.timestamp - b.timestamp)) {
     const frame = { ...action.context.frame, ...(action.context.frame.frameUrl ? { frameUrl: redactUrl(action.context.frame.frameUrl) } : {}) };
     const parameters: Record<string, unknown> = { frame };
     switch (action.type) {
+      case 'focus': break; // Focusing is implicit in the following click/input.
       case 'navigate': add({ type: 'navigate', url: redactUrl(action.url), parameters }); break;
       case 'input':
       case 'select': {
@@ -74,7 +76,7 @@ export function buildWorkflow(actions: NormalizedAction[], inputs: RecordingAnno
       case 'switchTab': {
         const index = action.metadata?.index;
         if (typeof index !== 'number' || !Number.isInteger(index) || index < 0) throw new Error('SwitchTab requires a stable tab index');
-        add({ type: 'switchTab', parameters: { ...parameters, index } }); break;
+        add({ type: 'switchTab', parameters: { ...parameters, index, scope: 'recording' } }); break;
       }
       default: throw new Error(`Unsupported recorded action: ${action.type}`);
     }

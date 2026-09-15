@@ -1,4 +1,4 @@
-import type { Locator, Page } from "@playwright/test";
+import type { Locator, Page, Frame } from "@playwright/test";
 import type { Target } from "@web-agent/protocol";
 import { TargetResolutionError, resolveCollectionTarget, resolveSingleTarget } from "@web-agent/locator-engine";
 
@@ -9,13 +9,13 @@ export async function assertSupportedTable(table: Locator): Promise<void> {
   if (virtual) throw new UnsupportedVirtualTableError();
 }
 
-export async function extractText(page: Page, target: Target): Promise<string> { const resolved = await resolveSingleTarget(page, target); return (await resolved.locator.textContent()) ?? ""; }
-export async function extractAttribute(page: Page, target: Target, attribute: string): Promise<string | null> { const resolved = await resolveSingleTarget(page, target); return resolved.locator.getAttribute(attribute); }
-export async function extractList(page: Page, target: Target): Promise<string[]> { const resolved = await resolveCollectionTarget(page, target); return Promise.all(resolved.locators.map(async (locator) => (await locator.textContent()) ?? "")); }
-export async function extractCount(page: Page, target: Target): Promise<number> { const resolved = await resolveCollectionTarget(page, target); return resolved.locators.length; }
+export async function extractText(page: Page | Frame, target: Target): Promise<string> { const resolved = await resolveSingleTarget(page, target); return (await resolved.locator.textContent()) ?? ""; }
+export async function extractAttribute(page: Page | Frame, target: Target, attribute: string): Promise<string | null> { const resolved = await resolveSingleTarget(page, target); return resolved.locator.getAttribute(attribute); }
+export async function extractList(page: Page | Frame, target: Target): Promise<string[]> { const resolved = await resolveCollectionTarget(page, target); return Promise.all(resolved.locators.map(async (locator) => (await locator.textContent()) ?? "")); }
+export async function extractCount(page: Page | Frame, target: Target): Promise<number> { const resolved = await resolveCollectionTarget(page, target); return resolved.locators.length; }
 
 export interface ExtractedTable { headers: string[]; rows: string[][] }
-export async function extractTable(page: Page, target: Target): Promise<ExtractedTable> {
+export async function extractTable(page: Page | Frame, target: Target): Promise<ExtractedTable> {
   const resolved = await resolveSingleTarget(page, target);
   await assertSupportedTable(resolved.locator);
   return {
@@ -28,7 +28,7 @@ function tableFingerprint(table: ExtractedTable): string {
   return JSON.stringify(table);
 }
 
-async function waitForTableFingerprintChange(page: Page, target: Target, previous: string, timeoutMs = 4_000): Promise<void> {
+async function waitForTableFingerprintChange(page: Page | Frame, target: Target, previous: string, timeoutMs = 4_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (tableFingerprint(await extractTable(page, target)) !== previous) return;
@@ -38,7 +38,7 @@ async function waitForTableFingerprintChange(page: Page, target: Target, previou
 }
 
 /** Extracts complete HTML-table pagination using a table-state condition, not URL changes. */
-export async function extractPaginatedTable(page: Page, tableTarget: Target, nextTarget: Target, maxPages = 100): Promise<ExtractedTable> {
+export async function extractPaginatedTable(page: Page | Frame, tableTarget: Target, nextTarget: Target, maxPages = 100): Promise<ExtractedTable> {
   const aggregate: ExtractedTable = { headers:[], rows:[] };
   for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
     const current = await extractTable(page, tableTarget);

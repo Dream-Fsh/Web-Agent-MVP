@@ -12,3 +12,10 @@ data/task09-evidence/
 .env
 .env.*
 !.env.example
+
+data/task10a-evidence/
+/task10a-*.log
+/task10b-*.log
+data/recording.lock*/
+data/browser-profile.lock*/
+/task10c-*.log

@@ -49,3 +49,24 @@ it('rejects simultaneous writers without overwriting a version', async () => {
     expect(JSON.parse(await fs.readFile(join(root, 'query/current.json'), 'utf8'))).toEqual({ currentVersion: 1 });
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
+
+it('does not publish a cancelled version or change current',async()=>{
+  const root=await fs.mkdtemp(join(tmpdir(),'workflow-cancel-'));
+  try{
+    await persistence.saveWorkflow(generated(),root);
+    const controller=new AbortController();controller.abort();
+    await expect(persistence.saveWorkflow(generated(),root,{signal:controller.signal})).rejects.toThrow(/abort/i);
+    expect(JSON.parse(await fs.readFile(join(root,'query/current.json'),'utf8'))).toEqual({currentVersion:1});
+    await expect(fs.readFile(join(root,'query/v2.json'))).rejects.toThrow();
+  }finally{await fs.rm(root,{recursive:true,force:true});}
+});
+
+it('holds a recoverable owner lease while publishing a workflow',async()=>{
+  const root=await fs.mkdtemp(join(tmpdir(),'workflow-owner-'));
+  const originalLink=fs.link;
+  const link=vi.spyOn(fs,'link').mockImplementation(async(from,to)=>{
+    const owner=JSON.parse(await fs.readFile(join(root,'query/.writer.lock/owner.json'),'utf8'));
+    expect(owner.pid).toBe(process.pid);await originalLink(from,to);
+  });
+  try{await persistence.saveWorkflow(generated(),root);}finally{link.mockRestore();await fs.rm(root,{recursive:true,force:true});}
+});

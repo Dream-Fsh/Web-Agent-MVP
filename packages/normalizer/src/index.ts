@@ -1,6 +1,6 @@
 import type { ElementSnapshot, RawEvent } from "@web-agent/protocol";
 
-export type NormalizedActionType = "navigate" | "click" | "input" | "select" | "waitFor" | "download" | "submit" | "switchTab" | "upload" | "drag-drop";
+export type NormalizedActionType = "navigate" | "click" | "input" | "select" | "waitFor" | "download" | "submit" | "switchTab" | "upload" | "drag-drop" | "scroll" | "keydown" | "focus" | "contextmenu";
 
 export interface ActionContext {
   sessionId: string;

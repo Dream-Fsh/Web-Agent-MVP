@@ -46,7 +46,7 @@ function ajaxPaginationPage(): string {
 
 function render(url: URL): string {
   switch (url.pathname) {
-    case "/login": return document("登录", '<label>用户名 <input name="username"></label><label>密码 <input type="password" name="password"></label><button type="button">登录</button>');
+    case "/login": return document("登录", '<label>用户名 <input name="username"></label><label>密码 <input type="password" name="password"></label><button type="button">登录</button><script>document.querySelector("button").onclick=()=>{localStorage.setItem("fixture-user",document.querySelector("input[name=username]").value);document.querySelector("input[name=password]").value="";location.href="/dashboard";}</script>');
     case "/dashboard": return document("广告后台", '<a href="/rta">RTA 策略</a><a href="/dynamic">动态定位器</a>');
     case "/rta": return rtaPage(url);
     case "/dynamic": {
@@ -59,6 +59,7 @@ function render(url: URL): string {
     case "/pagination-ambiguous": return document("歧义分页", `${rtaPage(url, "/pagination-ambiguous").replace(/^.*<main>|<\/main>.*$/g, "")}<a rel="next" href="/pagination-ambiguous?page=2">备用下一页</a>`);
     case "/modal": return document("模态窗", '<button id="open-filter">打开筛选弹窗</button><dialog id="filter"><p>筛选条件</p><button id="close-filter">关闭</button></dialog><script>const openFilter=document.querySelector("#open-filter");const closeFilter=document.querySelector("#close-filter");const filter=document.querySelector("#filter");openFilter.addEventListener("click",()=>filter.showModal());closeFilter.addEventListener("click",()=>filter.close())</script>');
     case "/spa": return document("SPA", '<button id="go">打开详情</button><p id="view">列表</p><script>go.onclick=()=>{history.pushState({},"","/spa/detail");view.textContent="详情"}</script>');
+    case "/record-contexts": return document("录制上下文", '<a href="/rta" target="_blank" rel="opener">查询新标签</a><iframe id="query-frame" title="查询 frame" src="/rta" style="display:block;width:calc(100% - 320px);height:760px"></iframe>');
     case "/iframe": return document("Iframe", '<iframe title="账户选择器" src="/iframe-content"></iframe>');
     case "/iframe-content": return document("账户选择器", '<button type="button">选择账户</button>');
     case "/nested-iframe": return document("嵌套 Iframe", '<iframe title="外层 frame" src="/iframe"></iframe>');
@@ -71,7 +72,7 @@ function render(url: URL): string {
 export async function startFixtureServer(port = 0): Promise<FixtureServer> {
   const server: Server = createServer((request, response) => {
     const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "127.0.0.1"}`);
-    const isKnownRoute = ["/login", "/dashboard", "/rta", "/dynamic", "/duplicate-buttons", "/pagination", "/ajax-pagination", "/pagination-ambiguous", "/modal", "/spa", "/iframe", "/iframe-content", "/nested-iframe", "/virtual-table", "/write-actions"].includes(url.pathname);
+    const isKnownRoute = ["/record-contexts", "/login", "/dashboard", "/rta", "/dynamic", "/duplicate-buttons", "/pagination", "/ajax-pagination", "/pagination-ambiguous", "/modal", "/spa", "/iframe", "/iframe-content", "/nested-iframe", "/virtual-table", "/write-actions"].includes(url.pathname);
     response.writeHead(isKnownRoute ? 200 : 404, { "content-type": "text/html; charset=utf-8" });
     response.end(render(url));
   });

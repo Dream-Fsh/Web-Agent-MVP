@@ -12,6 +12,7 @@
   ],
   "scripts": {
     "recorder": "node apps/recording-service/dist/start.js",
+    "start:demo": "npm run build && node scripts/start-demo.mjs",
     "postinstall": "npm run build",
     "build": "node scripts/build-workspaces.mjs",
     "test": "node --test scripts/*.test.mjs && npm run test --workspaces --if-present",
